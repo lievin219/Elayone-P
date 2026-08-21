@@ -80,3 +80,12 @@ export async function createRehearsal(choirId: string, data: { title: string; st
 export async function publishAnnouncement(choirId: string, data: { title: string; message: string; priority: 'NORMAL' | 'IMPORTANT' }) {
   return request(`/api/choirs/${choirId}/announcements`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }
+
+export type DirectoryUser = User & {
+  createdAt: string;
+  memberships: Array<{ choirId: string; vocalPart: string | null; availability: string }>;
+};
+
+export async function getAllUsers(): Promise<DirectoryUser[]> {
+  return request<DirectoryUser[]>('/api/users', { headers: await authHeaders() });
+}

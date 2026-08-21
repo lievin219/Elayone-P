@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AttendanceSummary, createRehearsal, getAttendanceSummary, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
+import { AttendanceSummary, createRehearsal, DirectoryUser, getAllUsers, getAttendanceSummary, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Admin';
@@ -168,7 +168,13 @@ function AdminPanel() {
   const [newsTitle, setNewsTitle] = useState('');
   const [newsMessage, setNewsMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [users, setUsers] = useState<DirectoryUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const choirId = 'elayone-main-choir';
+
+  React.useEffect(() => {
+    getAllUsers().then(setUsers).catch(() => undefined).finally(() => setUsersLoading(false));
+  }, []);
 
   async function addEvent() {
     if (!eventTitle || !eventLocation) return Alert.alert('Missing details', 'Add an event title and location.');
@@ -186,7 +192,7 @@ function AdminPanel() {
     Alert.alert('Remove a member', 'Choose a member from the People screen to remove them from the choir.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Go to People', onPress: () => undefined }]);
   }
 
-  return <View><Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text><Text style={styles.pageTitle}>Lead the ministry</Text><Text style={styles.pageCaption}>Keep the choir informed, prepared, and cared for.</Text><View style={styles.adminNotice}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.olive} /><View style={{ flex: 1 }}><Text style={styles.adminNoticeTitle}>Leader access</Text><Text style={styles.adminNoticeText}>Your changes are shared with the whole choir.</Text></View></View><AdminForm title="Add an event" icon="calendar-outline"><Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Full choir rehearsal" /><Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" /><TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add event</Text></TouchableOpacity></AdminForm><AdminForm title="Publish news" icon="megaphone-outline"><Field label="HEADLINE" value={newsTitle} onChangeText={setNewsTitle} placeholder="A note for the choir" /><Field label="MESSAGE" value={newsMessage} onChangeText={setNewsMessage} placeholder="Write your announcement" multiline /><TouchableOpacity style={styles.adminButton} onPress={publishNews} disabled={busy}><Ionicons name="paper-plane-outline" size={16} color={COLORS.white} /><Text style={styles.adminButtonText}>Publish news</Text></TouchableOpacity></AdminForm><AdminForm title="Member management" icon="people-outline"><Text style={styles.adminHelp}>Remove singers who are no longer part of Elayone Choir. This action cannot be undone.</Text><TouchableOpacity style={styles.removeButton} onPress={removeMember}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /><Text style={styles.removeButtonText}>Manage members</Text></TouchableOpacity></AdminForm></View>;
+  return <View><Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text><Text style={styles.pageTitle}>Lead the ministry</Text><Text style={styles.pageCaption}>Keep the choir informed, prepared, and cared for.</Text><View style={styles.adminNotice}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.olive} /><View style={{ flex: 1 }}><Text style={styles.adminNoticeTitle}>Leader access</Text><Text style={styles.adminNoticeText}>Your changes are shared with the whole choir.</Text></View></View><AdminForm title="All registered users" icon="people-circle-outline"><View style={styles.directoryHeader}><Text style={styles.directoryCount}>{users.length}</Text><Text style={styles.directoryLabel}>accounts</Text><TouchableOpacity onPress={() => { setUsersLoading(true); getAllUsers().then(setUsers).finally(() => setUsersLoading(false)); }}><Ionicons name="refresh-outline" size={19} color={COLORS.ink} /></TouchableOpacity></View>{usersLoading ? <ActivityIndicator color={COLORS.ink} /> : users.length === 0 ? <Text style={styles.adminHelp}>No registered users yet.</Text> : users.map((user) => <View key={user.id} style={styles.directoryRow}><View style={styles.directoryAvatar}><Text style={styles.directoryInitial}>{user.name.slice(0, 1).toUpperCase()}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{user.name}</Text><Text style={styles.personRole}>{user.email}</Text><Text style={styles.directoryMeta}>{user.role} · {user.memberships.length} choir membership{user.memberships.length === 1 ? '' : 's'}</Text></View></View>)}</AdminForm><AdminForm title="Add an event" icon="calendar-outline"><Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Full choir rehearsal" /><Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" /><TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add event</Text></TouchableOpacity></AdminForm><AdminForm title="Publish news" icon="megaphone-outline"><Field label="HEADLINE" value={newsTitle} onChangeText={setNewsTitle} placeholder="A note for the choir" /><Field label="MESSAGE" value={newsMessage} onChangeText={setNewsMessage} placeholder="Write your announcement" multiline /><TouchableOpacity style={styles.adminButton} onPress={publishNews} disabled={busy}><Ionicons name="paper-plane-outline" size={16} color={COLORS.white} /><Text style={styles.adminButtonText}>Publish news</Text></TouchableOpacity></AdminForm><AdminForm title="Member management" icon="people-outline"><Text style={styles.adminHelp}>Remove singers who are no longer part of Elayone Choir. This action cannot be undone.</Text><TouchableOpacity style={styles.removeButton} onPress={removeMember}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /><Text style={styles.removeButtonText}>Manage members</Text></TouchableOpacity></AdminForm></View>;
 }
 
 function AdminForm({ title, icon, children }: { title: string; icon: IconName; children: React.ReactNode }) {
@@ -303,6 +309,13 @@ const styles = StyleSheet.create({
   adminFormHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   adminFormIcon: { width: 32, height: 32, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   adminFormTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18 },
+  directoryHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  directoryCount: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 27, marginRight: 6 },
+  directoryLabel: { color: COLORS.muted, fontSize: 11, flex: 1 },
+  directoryRow: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 11, flexDirection: 'row', alignItems: 'center' },
+  directoryAvatar: { width: 35, height: 35, borderRadius: 18, backgroundColor: '#d7c5af', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  directoryInitial: { color: COLORS.ink, fontWeight: '800', fontSize: 13 },
+  directoryMeta: { color: COLORS.olive, fontSize: 9, fontWeight: '700', marginTop: 4 },
   adminButton: { backgroundColor: COLORS.ink, minHeight: 43, borderRadius: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   adminButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
   adminHelp: { color: COLORS.muted, fontSize: 11, lineHeight: 17, marginBottom: 13 },

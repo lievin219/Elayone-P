@@ -3,7 +3,8 @@ import cors from 'cors';
 import express from 'express';
 import authRoutes from './routes/auth';
 import choirRoutes from './routes/choir';
-import { requireAuth } from './middleware/auth';
+import userRoutes from './routes/users';
+import { requireAdmin, requireAuth } from './middleware/auth';
 
 if (!process.env.DATABASE_URL || !process.env.JWT_SECRET) throw new Error('DATABASE_URL and JWT_SECRET are required.');
 
@@ -13,6 +14,7 @@ app.use(express.json());
 app.get('/health', (_request, response) => response.json({ ok: true, service: 'elayone-choir-api' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/choirs', requireAuth, choirRoutes);
+app.use('/api/users', requireAuth, requireAdmin, userRoutes);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => console.log(`Elayone API listening on port ${port}`));
