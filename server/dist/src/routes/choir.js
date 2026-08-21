@@ -20,6 +20,16 @@ router.get('/:choirId/rehearsals', async (request, response) => {
     const rehearsals = await prisma_1.prisma.rehearsal.findMany({ where: { choirId: request.params.choirId }, orderBy: { startsAt: 'asc' }, include: { attendances: true } });
     return response.json(rehearsals);
 });
+router.get('/:choirId/attendance/summary', async (request, response) => {
+    const userId = request.userId;
+    const choirId = String(request.params.choirId);
+    const [total, confirmed, upcoming] = await Promise.all([
+        prisma_1.prisma.attendance.count({ where: { userId, rehearsal: { choirId } } }),
+        prisma_1.prisma.attendance.count({ where: { userId, rehearsal: { choirId }, status: 'YES' } }),
+        prisma_1.prisma.rehearsal.count({ where: { choirId, startsAt: { gte: new Date() } } }),
+    ]);
+    return response.json({ total, confirmed, rate: total ? Math.round((confirmed / total) * 100) : 0, upcoming });
+});
 router.post('/:choirId/rehearsals', auth_1.requireAdmin, async (request, response) => {
     const { title, startsAt, endsAt, location } = request.body;
     if (!title || !startsAt || !endsAt || !location)

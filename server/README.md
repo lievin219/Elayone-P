@@ -21,6 +21,7 @@ Routes:
 - `GET /api/choirs/me`
 - `GET /api/choirs/:choirId/people`
 - `GET /api/choirs/:choirId/rehearsals`
+- `GET /api/choirs/:choirId/attendance/summary`
 - `POST /api/choirs/:choirId/rehearsals/:rehearsalId/attendance`
 - `GET /api/choirs/:choirId/announcements`
 - `GET /api/choirs/:choirId/songs`
