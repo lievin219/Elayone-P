@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MEMBER
+  LEADER
+  ADMIN
+}
+
+enum VocalPart {
+  SOPRANO
+  ALTO
+  TENOR
+  BASS
+}
+
+enum AttendanceStatus {
+  YES
+  MAYBE
+  NO
+  PENDING
+}
+
+enum AnnouncementPriority {
+  NORMAL
+  IMPORTANT
+}
+
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  role         Role         @default(MEMBER)
+  createdAt    DateTime     @default(now())
+  memberships  Membership[]
+  attendances  Attendance[]
+  assignments  Assignment[]
+}
+
+model Choir {
+  id            String         @id @default(cuid())
+  name          String
+  description   String?
+  createdAt     DateTime       @default(now())
+  memberships   Membership[]
+  rehearsals    Rehearsal[]
+  songs         Song[]
+  announcements Announcement[]
+}
+
+model Membership {
+  id           String           @id @default(cuid())
+  userId       String
+  choirId      String
+  vocalPart    VocalPart?
+  availability AttendanceStatus @default(PENDING)
+  joinedAt     DateTime         @default(now())
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  choir        Choir            @relation(fields: [choirId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, choirId])
+}
+
+model Rehearsal {
+  id            String         @id @default(cuid())
+  choirId       String
+  title         String
+  startsAt      DateTime
+  endsAt        DateTime
+  location      String
+  choir         Choir          @relation(fields: [choirId], references: [id], onDelete: Cascade)
+  attendances   Attendance[]
+  assignments   Assignment[]
+  announcements Announcement[]
+  createdAt     DateTime       @default(now())
+}
+
+model Attendance {
+  id          String           @id @default(cuid())
+  rehearsalId String
+  userId      String
+  present     Boolean          @default(false)
+  status      AttendanceStatus @default(PENDING)
+  rehearsal   Rehearsal        @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([rehearsalId, userId])
+}
+
+model Announcement {
+  id          String               @id @default(cuid())
+  choirId     String
+  title       String
+  message     String
+  priority    AnnouncementPriority @default(NORMAL)
+  createdAt   DateTime             @default(now())
+  choir       Choir                @relation(fields: [choirId], references: [id], onDelete: Cascade)
+  rehearsal   Rehearsal?           @relation(fields: [rehearsalId], references: [id])
+  rehearsalId String?
+}
+
+model Assignment {
+  id          String    @id @default(cuid())
+  rehearsalId String
+  userId      String
+  part        String
+  note        String?
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([rehearsalId, userId, part])
+}
+
+model Song {
+  id        String   @id @default(cuid())
+  choirId   String
+  title     String
+  key       String?
+  status    String   @default("LEARN")
+  notes     String?
+  choir     Choir    @relation(fields: [choirId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}

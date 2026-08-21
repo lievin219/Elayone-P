@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Elayone Choir",
+    "slug": "elayone-choir",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#f7f7f5"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
