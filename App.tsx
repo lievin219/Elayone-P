@@ -54,6 +54,7 @@ const songs = [
   { title: 'Iminsi yose', key: 'Key of D', status: 'Ready', icon: 'musical-notes-outline' as IconName },
   { title: 'None urabikoze', key: 'Key of G', status: 'Learn', icon: 'book-outline' as IconName },
   { title: 'Jambo', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName },
+  { title: 'umvugutire', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName },
 ];
 
 export default function App() {
@@ -87,8 +88,8 @@ export default function App() {
           <View style={styles.topBar}>
             <View style={styles.brandMark}><Text style={styles.brandMarkText}>E</Text></View>
             <View style={styles.brandCopy}>
-              <Text style={styles.brandName}>ELAYONE</Text>
-              <Text style={styles.brandSub}>CHOIR MINISTRY</Text>
+              <Text style={styles.brandName}>ELAYONE MUSIC</Text>
+              <Text style={styles.brandSub}>GOSPEL MUSIC MINISTRY</Text>
             </View>
             <TouchableOpacity style={styles.notificationButton} accessibilityLabel="Sign out" onPress={() => signOut().then(() => setSession(null))}>
               <Ionicons name="notifications-outline" size={21} color={COLORS.ink} />
@@ -101,7 +102,7 @@ export default function App() {
               <View style={styles.hero}>
                 <Text style={styles.eyebrow}>MONDAY, 18 AUGUST 2025</Text>
                 <Text style={styles.heroTitle}>Serve with{`\n`}one voice.</Text>
-                <Text style={styles.heroBody}>A clear heart. A prepared voice. A shared mission.</Text>
+                <Text style={styles.heroBody}>A clear heart. A prepared voice. Music for the mission.</Text>
               </View>
 
               <View style={styles.nextRehearsalCard}>
@@ -225,8 +226,8 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
     <KeyboardAvoidingView style={styles.authShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
         <View style={styles.authBrandMark}><Text style={styles.authBrandMarkText}>E</Text></View>
-        <Text style={styles.authBrand}>ELAYONE</Text>
-        <Text style={styles.authBrandSub}>CHOIR MINISTRY</Text>
+        <Text style={styles.authBrand}>ELAYONE MUSIC</Text>
+        <Text style={styles.authBrandSub}>GOSPEL MUSIC MINISTRY</Text>
         <View style={styles.authRule} />
         <Text style={styles.authTitle}>{mode === 'login' ? 'Welcome back.' : 'Join the choir.'}</Text>
         <Text style={styles.authCaption}>{mode === 'login' ? 'Sign in to stay in rhythm with your ministry.' : 'Create your member account and serve with one voice.'}</Text>
@@ -355,7 +356,7 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 34 },
   brandMark: { width: 37, height: 37, borderRadius: 19, backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center' },
   brandMarkText: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700', fontStyle: 'italic' },
-  brandCopy: { marginLeft: 10, flex: 1 }, brandName: { color: COLORS.ink, fontSize: 14, fontWeight: '800', letterSpacing: 2.4 }, brandSub: { color: COLORS.muted, fontSize: 8, fontWeight: '700', letterSpacing: 1.6, marginTop: 3 },
+  brandCopy: { marginLeft: 10, flex: 1 }, brandName: { color: COLORS.ink, fontSize: 13, fontWeight: '800', letterSpacing: 1.8 }, brandSub: { color: COLORS.muted, fontSize: 8, fontWeight: '700', letterSpacing: 1.25, marginTop: 3 },
   notificationButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' }, notificationDot: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.clay, right: 10, top: 9 },
   hero: { marginBottom: 25 }, eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, color: COLORS.muted, marginBottom: 13 }, heroTitle: { fontFamily: 'Georgia', fontSize: 43, lineHeight: 47, color: COLORS.ink, letterSpacing: -1 }, heroBody: { fontSize: 14, color: COLORS.muted, marginTop: 13, lineHeight: 21 },
   nextRehearsalCard: { backgroundColor: COLORS.white, borderRadius: 5, padding: 20, borderWidth: 1, borderColor: '#eeece7', marginBottom: 29 }, cardTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.25 }, livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ec', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginRight: 5 }, liveText: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, rehearsalTitle: { fontFamily: 'Georgia', fontSize: 24, color: COLORS.ink, marginTop: 19 }, detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 }, detailText: { color: COLORS.muted, fontSize: 12, marginLeft: 5 }, detailIcon: { marginLeft: 14 }, cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, marginTop: 19, paddingTop: 15 }, avatarStack: { flexDirection: 'row', width: 62 }, avatar: { width: 25, height: 25, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.white, justifyContent: 'center', alignItems: 'center' }, avatarText: { fontSize: 9, fontWeight: '800', color: COLORS.ink }, attendanceText: { color: COLORS.muted, fontSize: 11, flex: 1 }, checkInButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ink, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 3, gap: 7 }, checkInText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
