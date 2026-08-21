@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -13,10 +14,10 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getStoredSession, Session, signIn, signOut, signUp } from './src/api';
+import { createRehearsal, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
-type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs';
+type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Admin';
 
 type Rehearsal = {
   day: string;
@@ -36,10 +37,10 @@ const rehearsals: Rehearsal[] = [
 ];
 
 const people = [
-  { name: 'Aline Mukamana', role: 'Choir director', initials: 'AM', tone: '#d7c5af', part: 'Soprano', availability: 'YES' },
-  { name: 'Daniel Niyonzima', role: 'Worship leader', initials: 'DN', tone: '#b9c2b0', part: 'Tenor', availability: 'YES' },
-  { name: 'Munezero Grace', role: 'Soprano lead', initials: 'MG', tone: '#d9b7b0', part: 'Soprano', availability: 'MAYBE' },
-  { name: 'Eric Ishimwe', role: 'Tenor lead', initials: 'EI', tone: '#b3bdc9', part: 'Tenor', availability: 'NO' },
+  { id: 'director-id', name: 'Serge', role: 'Choir director', initials: 'AM', tone: '#d7c5af', part: 'Soprano', availability: 'YES' },
+  { id: 'worship-leader-id', name: 'Prince', role: 'Worship leader', initials: 'DN', tone: '#b9c2b0', part: 'Tenor', availability: 'YES' },
+  { id: 'soprano-lead-id', name: 'Alain', role: 'Soprano lead', initials: 'MG', tone: '#d9b7b0', part: 'Soprano', availability: 'MAYBE' },
+  { id: 'tenor-lead-id', name: 'Nzera', role: 'Tenor lead', initials: 'EI', tone: '#b3bdc9', part: 'Tenor', availability: 'NO' },
 ];
 
 const attendanceRoster = [
@@ -61,8 +62,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('Home');
   const [selectedRehearsal, setSelectedRehearsal] = useState<string>('Sunday service set');
   const [checkedIn, setCheckedIn] = useState(false);
+  const [visiblePeople, setVisiblePeople] = useState(people);
 
   const showHome = activeTab === 'Home';
+  const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
 
   React.useEffect(() => {
     getStoredSession().then(setSession).finally(() => setAuthReady(true));
@@ -138,13 +141,13 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : (
-            <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} />
+          ) : activeTab === 'Admin' ? <AdminPanel /> : (
+            <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} />
           )}
         </ScrollView>
         <View style={styles.bottomNav}>
-          {(['Home', 'Rehearsals', 'People', 'Songs'] as Tab[]).map((tab) => {
-            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Rehearsals' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : 'musical-notes-outline';
+          {(['Home', 'Rehearsals', 'People', 'Songs', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
+            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Rehearsals' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : 'shield-checkmark-outline';
             const active = activeTab === tab;
             return <TouchableOpacity key={tab} style={styles.navItem} onPress={() => setActiveTab(tab)}><View style={[styles.navIconWrap, active && styles.navIconActive]}><Ionicons name={icon} size={21} color={active ? COLORS.white : COLORS.muted} /></View><Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text></TouchableOpacity>;
           })}
@@ -152,6 +155,37 @@ export default function App() {
       </View>
     </SafeAreaView>
   );
+}
+
+function AdminPanel() {
+  const [eventTitle, setEventTitle] = useState('');
+  const [eventLocation, setEventLocation] = useState('');
+  const [newsTitle, setNewsTitle] = useState('');
+  const [newsMessage, setNewsMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const choirId = 'elayone-main-choir';
+
+  async function addEvent() {
+    if (!eventTitle || !eventLocation) return Alert.alert('Missing details', 'Add an event title and location.');
+    setBusy(true);
+    try { await createRehearsal(choirId, { title: eventTitle, location: eventLocation, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() }); setEventTitle(''); setEventLocation(''); Alert.alert('Event added', 'The choir can now see this rehearsal.'); } catch (error) { Alert.alert('Could not add event', error instanceof Error ? error.message : 'Try again.'); } finally { setBusy(false); }
+  }
+
+  async function publishNews() {
+    if (!newsTitle || !newsMessage) return Alert.alert('Missing details', 'Add a headline and message.');
+    setBusy(true);
+    try { await publishAnnouncement(choirId, { title: newsTitle, message: newsMessage, priority: 'NORMAL' }); setNewsTitle(''); setNewsMessage(''); Alert.alert('News published', 'Your announcement is now available to the choir.'); } catch (error) { Alert.alert('Could not publish', error instanceof Error ? error.message : 'Try again.'); } finally { setBusy(false); }
+  }
+
+  function removeMember() {
+    Alert.alert('Remove a member', 'Choose a member from the People screen to remove them from the choir.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Go to People', onPress: () => undefined }]);
+  }
+
+  return <View><Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text><Text style={styles.pageTitle}>Lead the ministry</Text><Text style={styles.pageCaption}>Keep the choir informed, prepared, and cared for.</Text><View style={styles.adminNotice}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.olive} /><View style={{ flex: 1 }}><Text style={styles.adminNoticeTitle}>Leader access</Text><Text style={styles.adminNoticeText}>Your changes are shared with the whole choir.</Text></View></View><AdminForm title="Add an event" icon="calendar-outline"><Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Full choir rehearsal" /><Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" /><TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add event</Text></TouchableOpacity></AdminForm><AdminForm title="Publish news" icon="megaphone-outline"><Field label="HEADLINE" value={newsTitle} onChangeText={setNewsTitle} placeholder="A note for the choir" /><Field label="MESSAGE" value={newsMessage} onChangeText={setNewsMessage} placeholder="Write your announcement" multiline /><TouchableOpacity style={styles.adminButton} onPress={publishNews} disabled={busy}><Ionicons name="paper-plane-outline" size={16} color={COLORS.white} /><Text style={styles.adminButtonText}>Publish news</Text></TouchableOpacity></AdminForm><AdminForm title="Member management" icon="people-outline"><Text style={styles.adminHelp}>Remove singers who are no longer part of Elayone Choir. This action cannot be undone.</Text><TouchableOpacity style={styles.removeButton} onPress={removeMember}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /><Text style={styles.removeButtonText}>Manage members</Text></TouchableOpacity></AdminForm></View>;
+}
+
+function AdminForm({ title, icon, children }: { title: string; icon: IconName; children: React.ReactNode }) {
+  return <View style={styles.adminForm}><View style={styles.adminFormHeader}><View style={styles.adminFormIcon}><Ionicons name={icon} size={18} color={COLORS.ink} /></View><Text style={styles.adminFormTitle}>{title}</Text></View>{children}</View>;
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
@@ -208,8 +242,8 @@ function QuickAction({ icon, label, onPress }: { icon: IconName; label: string; 
   return <TouchableOpacity style={styles.quickAction} onPress={onPress}><View style={styles.quickIcon}><Ionicons name={icon} size={20} color={COLORS.ink} /></View><Text style={styles.quickLabel}>{label}</Text><Ionicons name="arrow-forward" size={15} color={COLORS.muted} /></TouchableOpacity>;
 }
 
-function TabView({ tab, selectedRehearsal, setSelectedRehearsal }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void }) {
-  return <><BaseTabView tab={tab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selectedRehearsal} />}{tab === 'People' && <AvailabilitySummary />}</>;
+function TabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void }) {
+  return <><BaseTabView tab={tab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onRemovePerson={onRemovePerson} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selectedRehearsal} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
 }
 
 function AttendanceRoster({ rehearsal }: { rehearsal: string }) {
@@ -220,7 +254,15 @@ function AvailabilitySummary() {
   return <View style={styles.availabilityCard}><View><Text style={styles.cardEyebrow}>AVAILABILITY</Text><Text style={styles.availabilityTitle}>For the next rehearsal</Text></View><View style={styles.availabilityStats}><View><Text style={[styles.availabilityNumber, { color: COLORS.olive }]}>18</Text><Text style={styles.availabilityLabel}>COMING</Text></View><View><Text style={[styles.availabilityNumber, { color: COLORS.clay }]}>3</Text><Text style={styles.availabilityLabel}>MAYBE</Text></View><View><Text style={[styles.availabilityNumber, { color: COLORS.muted }]}>3</Text><Text style={styles.availabilityLabel}>AWAY</Text></View></View></View>;
 }
 
-function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void }) {
+function AdminMemberList({ peopleList, onRemovePerson }: { peopleList: typeof people; onRemovePerson: (id: string) => void }) {
+  async function removePerson(person: (typeof people)[number]) {
+    Alert.alert('Remove member?', `${person.name} will lose access to this choir.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: async () => { try { await removeChoirMember('elayone-main-choir', person.id); onRemovePerson(person.id); } catch (error) { Alert.alert('Could not remove member', error instanceof Error ? error.message : 'Try again.'); } } }]);
+  }
+
+  return <View style={styles.adminMembers}><Text style={styles.adminMembersTitle}>MANAGE MEMBERS</Text>{peopleList.map((person) => <View key={person.id} style={styles.adminMemberRow}><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part} · {person.role}</Text></View><TouchableOpacity style={styles.removeIconButton} onPress={() => removePerson(person)} accessibilityLabel={`Remove ${person.name}`}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /></TouchableOpacity></View>)}</View>;
+}
+
+function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void }) {
   const heading = tab === 'Rehearsals' ? 'Rehearsals' : tab === 'People' ? 'The choir' : 'Song library';
   const caption = tab === 'Rehearsals' ? 'A prepared choir is a present choir.' : tab === 'People' ? '24 voices, one offering.' : 'Songs we carry together.';
   return <View><Text style={styles.pageEyebrow}>ELAYONE / {tab.toUpperCase()}</Text><Text style={styles.pageTitle}>{heading}</Text><Text style={styles.pageCaption}>{caption}</Text>{tab === 'Rehearsals' && <><TouchableOpacity style={styles.addButton}><Ionicons name="add" size={19} color={COLORS.white} /><Text style={styles.addButtonText}>Add rehearsal</Text></TouchableOpacity><Text style={styles.listLabel}>AUGUST 2025</Text>{rehearsals.map((item) => <TouchableOpacity key={item.title} style={[styles.rehearsalListItem, selectedRehearsal === item.title && styles.rehearsalListSelected]} onPress={() => setSelectedRehearsal(item.title)}><View style={[styles.dateBlock, { backgroundColor: item.color }]}><Text style={styles.dateDay}>{item.day}</Text><Text style={styles.dateNumber}>{item.date}</Text><Text style={styles.dateMonth}>{item.month}</Text></View><View style={styles.listMain}><Text style={styles.listTitle}>{item.title}</Text><Text style={styles.listMeta}>{item.time}  ·  {item.room}</Text><Text style={styles.listAttendance}>{item.count} attending</Text></View><Ionicons name={selectedRehearsal === item.title ? 'checkmark-circle' : 'chevron-forward'} size={20} color={selectedRehearsal === item.title ? COLORS.olive : COLORS.muted} /></TouchableOpacity>)}</>}{tab === 'People' && <><View style={styles.peopleSummary}><Text style={styles.peopleNumber}>24</Text><View><Text style={styles.peopleTitle}>Active singers</Text><Text style={styles.peopleCaption}>4 section leaders · 3 vocal sections</Text></View></View>{people.map((person) => <View key={person.name} style={styles.personRow}><View style={[styles.personAvatar, { backgroundColor: person.tone }]}><Text style={styles.personInitials}>{person.initials}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.role}</Text></View><Ionicons name="ellipsis-horizontal" size={20} color={COLORS.muted} /></View>)}</>}{tab === 'Songs' && <><View style={styles.songFeatured}><View style={styles.songIconLarge}><Ionicons name="musical-notes" size={25} color={COLORS.white} /></View><View style={{ flex: 1 }}><Text style={styles.songFeatureLabel}>CURRENTLY LEARNING</Text><Text style={styles.songFeatureTitle}>Imbaraga Zayo</Text><Text style={styles.songFeatureMeta}>Key of G  ·  62% complete</Text></View><Ionicons name="play-circle-outline" size={29} color={COLORS.white} /></View>{songs.map((song) => <View key={song.title} style={styles.songRow}><View style={styles.songIcon}><Ionicons name={song.icon} size={19} color={COLORS.ink} /></View><View style={styles.songInfo}><Text style={styles.songTitle}>{song.title}</Text><Text style={styles.songMeta}>{song.key}</Text></View><View style={[styles.songStatus, song.status === 'Ready' && styles.readyStatus]}><Text style={[styles.songStatusText, song.status === 'Ready' && styles.readyStatusText]}>{song.status}</Text></View></View>)}</>}</View>;
@@ -249,6 +291,22 @@ const styles = StyleSheet.create({
   authSwitch: { alignItems: 'center', marginTop: 25 },
   authSwitchText: { color: '#aaa9a3', fontSize: 12 },
   authSwitchStrong: { color: COLORS.white, fontWeight: '800' },
+  adminNotice: { backgroundColor: '#eef2ec', borderRadius: 4, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 17 },
+  adminNoticeTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
+  adminNoticeText: { color: COLORS.muted, fontSize: 10, marginTop: 3 },
+  adminForm: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 15, marginBottom: 12 },
+  adminFormHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  adminFormIcon: { width: 32, height: 32, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  adminFormTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18 },
+  adminButton: { backgroundColor: COLORS.ink, minHeight: 43, borderRadius: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  adminButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+  adminHelp: { color: COLORS.muted, fontSize: 11, lineHeight: 17, marginBottom: 13 },
+  removeButton: { borderWidth: 1, borderColor: '#e4c9c1', minHeight: 43, borderRadius: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  removeButtonText: { color: COLORS.clay, fontSize: 12, fontWeight: '800' },
+  adminMembers: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 15, marginBottom: 20 },
+  adminMembersTitle: { color: COLORS.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.2, marginBottom: 8 },
+  adminMemberRow: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' },
+  removeIconButton: { width: 35, height: 35, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8eeeb', borderRadius: 3 },
   rosterSection: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 15, marginTop: 12, marginBottom: 15 },
   rosterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   responseSummary: { alignItems: 'flex-end' },

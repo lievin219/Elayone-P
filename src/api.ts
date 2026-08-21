@@ -62,3 +62,15 @@ export async function updateAttendance(choirId: string, rehearsalId: string, sta
 export async function getAnnouncements(choirId: string) {
   return request<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>(`/api/choirs/${choirId}/announcements`, { headers: await authHeaders() });
 }
+
+export async function removeChoirMember(choirId: string, userId: string) {
+  return request<void>(`/api/choirs/${choirId}/people/${userId}`, { method: 'DELETE', headers: await authHeaders() });
+}
+
+export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string }) {
+  return request(`/api/choirs/${choirId}/rehearsals`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
+}
+
+export async function publishAnnouncement(choirId: string, data: { title: string; message: string; priority: 'NORMAL' | 'IMPORTANT' }) {
+  return request(`/api/choirs/${choirId}/announcements`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
+}

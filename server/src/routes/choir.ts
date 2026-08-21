@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, requireAdmin } from '../middleware/auth';
 
 const router = Router();
 
@@ -14,9 +14,21 @@ router.get('/:choirId/people', async (request, response) => {
   return response.json(members);
 });
 
+router.delete('/:choirId/people/:userId', requireAdmin, async (request, response) => {
+  await prisma.membership.delete({ where: { userId_choirId: { userId: String(request.params.userId), choirId: String(request.params.choirId) } } });
+  return response.status(204).send();
+});
+
 router.get('/:choirId/rehearsals', async (request, response) => {
   const rehearsals = await prisma.rehearsal.findMany({ where: { choirId: request.params.choirId }, orderBy: { startsAt: 'asc' }, include: { attendances: true } });
   return response.json(rehearsals);
+});
+
+router.post('/:choirId/rehearsals', requireAdmin, async (request, response) => {
+  const { title, startsAt, endsAt, location } = request.body;
+  if (!title || !startsAt || !endsAt || !location) return response.status(400).json({ message: 'Title, dates, and location are required.' });
+  const rehearsal = await prisma.rehearsal.create({ data: { choirId: String(request.params.choirId), title, startsAt: new Date(startsAt), endsAt: new Date(endsAt), location } });
+  return response.status(201).json(rehearsal);
 });
 
 router.post('/:choirId/rehearsals/:rehearsalId/attendance', async (request: AuthRequest, response) => {
@@ -29,6 +41,13 @@ router.post('/:choirId/rehearsals/:rehearsalId/attendance', async (request: Auth
 
 router.get('/:choirId/announcements', async (request, response) => {
   return response.json(await prisma.announcement.findMany({ where: { choirId: String(request.params.choirId) }, orderBy: { createdAt: 'desc' } }));
+});
+
+router.post('/:choirId/announcements', requireAdmin, async (request, response) => {
+  const { title, message, priority } = request.body;
+  if (!title || !message) return response.status(400).json({ message: 'Title and message are required.' });
+  const announcement = await prisma.announcement.create({ data: { choirId: String(request.params.choirId), title, message, priority: priority === 'IMPORTANT' ? 'IMPORTANT' : 'NORMAL' } });
+  return response.status(201).json(announcement);
 });
 
 router.get('/:choirId/songs', async (request, response) => {
