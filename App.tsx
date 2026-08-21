@@ -14,7 +14,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { createRehearsal, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
+import { AttendanceSummary, createRehearsal, getAttendanceSummary, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Admin';
@@ -51,9 +51,9 @@ const attendanceRoster = [
 ];
 
 const songs = [
-  { title: 'Great Is Thy Faithfulness', key: 'Key of D', status: 'Ready', icon: 'musical-notes-outline' as IconName },
-  { title: 'Imbaraga Zayo', key: 'Key of G', status: 'Learn', icon: 'book-outline' as IconName },
-  { title: 'Maranatha', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName },
+  { title: 'Iminsi yose', key: 'Key of D', status: 'Ready', icon: 'musical-notes-outline' as IconName },
+  { title: 'None urabikoze', key: 'Key of G', status: 'Learn', icon: 'book-outline' as IconName },
+  { title: 'Jambo', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName },
 ];
 
 export default function App() {
@@ -63,6 +63,7 @@ export default function App() {
   const [selectedRehearsal, setSelectedRehearsal] = useState<string>('Sunday service set');
   const [checkedIn, setCheckedIn] = useState(false);
   const [visiblePeople, setVisiblePeople] = useState(people);
+  const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
 
   const showHome = activeTab === 'Home';
   const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
@@ -70,6 +71,10 @@ export default function App() {
   React.useEffect(() => {
     getStoredSession().then(setSession).finally(() => setAuthReady(true));
   }, []);
+
+  React.useEffect(() => {
+    if (session) getAttendanceSummary('elayone-main-choir').then(setAttendanceSummary).catch(() => undefined);
+  }, [session]);
 
   if (!authReady) return <View style={styles.loadingScreen}><ActivityIndicator color={COLORS.ink} /></View>;
   if (!session) return <AuthScreen onAuthenticated={setSession} />;
@@ -115,7 +120,7 @@ export default function App() {
                   <View style={styles.avatarStack}>
                     {['A', 'D', 'G', '+'].map((letter, index) => <View key={letter} style={[styles.avatar, { marginLeft: index === 0 ? 0 : -7, backgroundColor: index === 3 ? COLORS.ink : ['#d7c5af', '#b9c2b0', '#d9b7b0'][index] }]}><Text style={[styles.avatarText, index === 3 && { color: COLORS.white }]}>{letter}</Text></View>)}
                   </View>
-                  <Text style={styles.attendanceText}>18 of 24 attending</Text>
+                  <Text style={styles.attendanceText}>{attendanceSummary.confirmed} confirmed attendance</Text>
                   <TouchableOpacity style={styles.checkInButton} onPress={() => setCheckedIn(!checkedIn)}>
                     <Text style={styles.checkInText}>{checkedIn ? 'Checked in' : 'Check in'}</Text>
                     <Ionicons name={checkedIn ? 'checkmark' : 'arrow-forward'} size={15} color={COLORS.white} />
@@ -128,8 +133,8 @@ export default function App() {
                 <TouchableOpacity onPress={() => setActiveTab('Rehearsals')}><Text style={styles.seeAll}>See all</Text></TouchableOpacity>
               </View>
               <View style={styles.weekGrid}>
-                <View style={styles.weekMetric}><Text style={styles.metricNumber}>03</Text><Text style={styles.metricLabel}>REHEARSALS</Text><View style={styles.metricRule} /><Text style={styles.metricFoot}>2 upcoming</Text></View>
-                <View style={styles.weekMetric}><Text style={styles.metricNumber}>86<Text style={styles.metricPercent}>%</Text></Text><Text style={styles.metricLabel}>ATTENDANCE</Text><View style={[styles.metricRule, { backgroundColor: COLORS.olive }]} /><Text style={styles.metricFoot}>+8% this month</Text></View>
+                <View style={styles.weekMetric}><Text style={styles.metricNumber}>{String(attendanceSummary.upcoming).padStart(2, '0')}</Text><Text style={styles.metricLabel}>REHEARSALS</Text><View style={styles.metricRule} /><Text style={styles.metricFoot}>upcoming</Text></View>
+                <View style={styles.weekMetric}><Text style={styles.metricNumber}>{attendanceSummary.rate}<Text style={styles.metricPercent}>%</Text></Text><Text style={styles.metricLabel}>ATTENDANCE</Text><View style={[styles.metricRule, { backgroundColor: COLORS.olive }]} /><Text style={styles.metricFoot}>{attendanceSummary.total} responses</Text></View>
                 <View style={styles.weekMetric}><Text style={styles.metricNumber}>04</Text><Text style={styles.metricLabel}>NEW SONGS</Text><View style={[styles.metricRule, { backgroundColor: COLORS.clay }]} /><Text style={styles.metricFoot}>in the library</Text></View>
               </View>
 

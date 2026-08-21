@@ -24,6 +24,17 @@ router.get('/:choirId/rehearsals', async (request, response) => {
   return response.json(rehearsals);
 });
 
+router.get('/:choirId/attendance/summary', async (request: AuthRequest, response) => {
+  const userId = request.userId as string;
+  const choirId = String(request.params.choirId);
+  const [total, confirmed, upcoming] = await Promise.all([
+    prisma.attendance.count({ where: { userId, rehearsal: { choirId } } }),
+    prisma.attendance.count({ where: { userId, rehearsal: { choirId }, status: 'YES' } }),
+    prisma.rehearsal.count({ where: { choirId, startsAt: { gte: new Date() } } }),
+  ]);
+  return response.json({ total, confirmed, rate: total ? Math.round((confirmed / total) * 100) : 0, upcoming });
+});
+
 router.post('/:choirId/rehearsals', requireAdmin, async (request, response) => {
   const { title, startsAt, endsAt, location } = request.body;
   if (!title || !startsAt || !endsAt || !location) return response.status(400).json({ message: 'Title, dates, and location are required.' });

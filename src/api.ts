@@ -63,6 +63,12 @@ export async function getAnnouncements(choirId: string) {
   return request<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>(`/api/choirs/${choirId}/announcements`, { headers: await authHeaders() });
 }
 
+export type AttendanceSummary = { total: number; confirmed: number; rate: number; upcoming: number };
+
+export async function getAttendanceSummary(choirId: string): Promise<AttendanceSummary> {
+  return request<AttendanceSummary>(`/api/choirs/${choirId}/attendance/summary`, { headers: await authHeaders() });
+}
+
 export async function removeChoirMember(choirId: string, userId: string) {
   return request<void>(`/api/choirs/${choirId}/people/${userId}`, { method: 'DELETE', headers: await authHeaders() });
 }

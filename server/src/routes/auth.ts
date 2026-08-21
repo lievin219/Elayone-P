@@ -23,7 +23,12 @@ router.post('/signup', async (request, response) => {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return response.status(409).json({ message: 'An account with that email already exists.' });
   const passwordHash = await bcrypt.hash(password, 12);
-  const user = await prisma.user.create({ data: { name, email, passwordHash } });
+  const user = await prisma.$transaction(async (transaction) => {
+    const choir = await transaction.choir.upsert({ where: { id: 'elayone-main-choir' }, update: {}, create: { id: 'elayone-main-choir', name: 'Elayone Choir', description: 'A choir serving with one voice.' } });
+    const createdUser = await transaction.user.create({ data: { name, email, passwordHash } });
+    await transaction.membership.create({ data: { userId: createdUser.id, choirId: choir.id } });
+    return createdUser;
+  });
   return response.status(201).json(issueSession(user));
 });
 
