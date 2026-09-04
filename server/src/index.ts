@@ -16,5 +16,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/choirs', requireAuth, choirRoutes);
 app.use('/api/users', requireAuth, requireAdmin, userRoutes);
 
-const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => console.log(`Elayone API listening on port ${port}`));
+const port = Number(process.env.PORT) || 4000;
+
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Elayone API listening on port ${port}`);
+});
