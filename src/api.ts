@@ -13,7 +13,7 @@ export type Session = {
 };
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
-const SESSION_KEY = 'elayone_session';
+const SESSION_KEY = process.env.SESSION_KEY
 
 async function authHeaders(): Promise<HeadersInit> {
   const session = await getStoredSession();
