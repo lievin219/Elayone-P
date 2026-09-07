@@ -15,7 +15,7 @@ async function main() {
     { where: { userId_choirId: { userId: director.id, choirId: choir.id } }, update: {}, create: { userId: director.id, choirId: choir.id, vocalPart: VocalPart.SOPRANO } }
   );
   const director2=await prisma.user.upsert({where:{email:"test2@gmail.com"}, update:{}, create:{name:"Test User 2", email:"test2@gmail.com", passwordHash, role:Role.LEADER}});
-  await prisma.song.createMany({ data: [{ choirId: choir.id, title: 'Great Is Thy Faithfulness', key: 'D', status: 'READY' }, { choirId: choir.id, title: 'Imbaraga Zayo', key: 'G', status: 'LEARN' }], skipDuplicates: true });
+  await prisma.song.createMany({ data: [{ choirId: choir.id, title: 'Ni muzima', key: 'D', status: 'READY' }, { choirId: choir.id, title: 'Arera', key: 'G', status: 'LEARN' }], skipDuplicates: true });
   const rehearsal = await prisma.rehearsal.upsert({ where: { id: 'elayone-first-rehearsal' }, update: {}, create: { id: 'elayone-first-rehearsal', choirId: choir.id, title: 'Sunday service set', startsAt: new Date('2025-08-18T18:00:00Z'), endsAt: new Date('2025-08-18T20:00:00Z'), location: 'Main sanctuary' } });
   await prisma.attendance.upsert({ where: { rehearsalId_userId: { rehearsalId: rehearsal.id, userId: director.id } }, update: { status: 'YES', present: true }, create: { rehearsalId: rehearsal.id, userId: director.id, status: 'YES', present: true } });
   const announcementClient = (prisma as unknown as { announcement: { upsert: (args: { where: { id: string }; update: Record<string, never>; create: { id: string; choirId: string; title: string; message: string; priority: string } }) => Promise<unknown> } }).announcement;
