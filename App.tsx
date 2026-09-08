@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Image,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -225,7 +226,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
     <StatusBar barStyle="light-content" />
     <KeyboardAvoidingView style={styles.authShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.authBrandMark}><Text style={styles.authBrandMarkText}>E</Text></View>
+        <Image source={require('./elayone.jpg')} style={styles.authBrandMark} accessibilityLabel="Elayone Music logo" />
         <Text style={styles.authBrand}>ELAYONE MUSIC</Text>
         <Text style={styles.authBrandSub}>GOSPEL MUSIC MINISTRY</Text>
         <View style={styles.authRule} />
@@ -287,8 +288,7 @@ const styles = StyleSheet.create({
   authSafeArea: { flex: 1, backgroundColor: COLORS.ink },
   authShell: { flex: 1 },
   authContent: { flexGrow: 1, paddingHorizontal: 27, paddingTop: 46, paddingBottom: 35 },
-  authBrandMark: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
-  authBrandMarkText: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 28, fontWeight: '700', fontStyle: 'italic' },
+  authBrandMark: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.white },
   authBrand: { color: COLORS.white, fontSize: 15, fontWeight: '800', letterSpacing: 2.8, marginTop: 14 },
   authBrandSub: { color: '#aaa9a3', fontSize: 9, fontWeight: '700', letterSpacing: 1.8, marginTop: 4 },
   authRule: { height: 1, backgroundColor: '#3b3b39', marginTop: 40, marginBottom: 38 },

@@ -166,3 +166,34 @@
 {"_e":"metro:bundling:done","_t":1788866564117,"id":"1","total":785,"ms":21740.174179}
 {"_e":"metro:client_log","_t":1788866566951,"level":"warn","data":["SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/AppAndFlow/react-native-safe-area-context"]}
 {"_e":"metro:server_log","_t":1788867028643,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","host.exp.exponent","Pixel 4a - 13 - API 33","60"]}
+{"_e":"root:init","_t":1788867570439,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1788867570442,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1788867570458,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://192.168.1.70:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"root:init","_t":1788867626428,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1788867626431,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1788867626439,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://192.168.1.70:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"devserver:start","_t":1788867628818,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1788867631421,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"root:init","_t":1788867630473,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1788867630474,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1788867630481,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://192.168.1.70:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"devserver:start","_t":1788867631329,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1788867631814,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1788867632900,"plugins":[]}
+{"_e":"expo:dev-tools-plugin:load","_t":1788867632978,"plugins":[]}
+{"_e":"metro:instantiate","_t":1788867635946,"atlas":false,"workers":3,"host":"::","port":8081}
+{"_e":"root:init","_t":1788867668788,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1788867668792,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1788867668804,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://192.168.1.70:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"devserver:start","_t":1788867671392,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1788867673553,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1788867674517,"plugins":[]}
+{"_e":"metro:instantiate","_t":1788867676781,"atlas":false,"workers":3,"host":"::","port":8081}
+{"_e":"root:init","_t":1788868029677,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1788868029681,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1788868029688,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://192.168.1.70:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"devserver:start","_t":1788868108282,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1788868111448,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1788868112872,"plugins":[]}
+{"_e":"metro:instantiate","_t":1788868115347,"atlas":false,"workers":3,"host":"::","port":8082}
+{"_e":"metro:server_log","_t":1788868234972,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","host.exp.exponent","Pixel 4a - 13 - API 33","60"]}
