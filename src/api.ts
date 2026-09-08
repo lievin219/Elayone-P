@@ -12,8 +12,8 @@ export type Session = {
   user: User;
 };
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000';
-const SESSION_KEY = process.env.SESSION_KEY
+const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+const SESSION_KEY = process.env.SESSION_KEY ?? 'elayone-session';
 
 async function authHeaders(): Promise<HeadersInit> {
   const session = await getStoredSession();
@@ -21,10 +21,15 @@ async function authHeaders(): Promise<HeadersInit> {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+    });
+  } catch {
+    throw new Error(`Cannot reach the server at ${API_URL}. Make sure the API is running and your phone is on the same Wi-Fi network.`);
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.message ?? 'Something went wrong. Please try again.');
   return body as T;

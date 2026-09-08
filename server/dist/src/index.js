@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const cors_1 = __importDefault(require("cors"));
 const express_1 = __importDefault(require("express"));
+const node_os_1 = __importDefault(require("node:os"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const choir_1 = __importDefault(require("./routes/choir"));
 const users_1 = __importDefault(require("./routes/users"));
@@ -19,5 +20,10 @@ app.get('/health', (_request, response) => response.json({ ok: true, service: 'e
 app.use('/api/auth', auth_1.default);
 app.use('/api/choirs', auth_2.requireAuth, choir_1.default);
 app.use('/api/users', auth_2.requireAuth, auth_2.requireAdmin, users_1.default);
-const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => console.log(`Elayone API listening on port ${port}`));
+const port = Number(process.env.PORT) || 4000;
+app.listen(port, '0.0.0.0', () => {
+    const interfaces = Object.values(node_os_1.default.networkInterfaces()).flat();
+    const lanAddress = interfaces.find((networkInterface) => networkInterface?.family === 'IPv4' && !networkInterface.internal)?.address;
+    console.log(`Elayone API listening locally at http://localhost:${port}`);
+    console.log(`Mobile API URL: http://${lanAddress ?? '<your-computer-ip>'}:${port}`);
+});

@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
+import os from 'node:os';
 import authRoutes from './routes/auth';
 import choirRoutes from './routes/choir';
 import userRoutes from './routes/users';
@@ -19,5 +20,8 @@ app.use('/api/users', requireAuth, requireAdmin, userRoutes);
 const port = Number(process.env.PORT) || 4000;
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`Elayone API listening on port ${port}`);
+  const interfaces = Object.values(os.networkInterfaces()).flat();
+  const lanAddress = interfaces.find((networkInterface) => networkInterface?.family === 'IPv4' && !networkInterface.internal)?.address;
+  console.log(`Elayone API listening locally at http://localhost:${port}`);
+  console.log(`Mobile API URL: http://${lanAddress ?? '<your-computer-ip>'}:${port}`);
 });
