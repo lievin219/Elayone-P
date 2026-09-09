@@ -66,6 +66,8 @@ export default function App() {
   const [checkedIn, setCheckedIn] = useState(false);
   const [visiblePeople, setVisiblePeople] = useState(people);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
+  const [announcements, setAnnouncements] = useState<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>([]);
+  const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false);
 
   const showHome = activeTab === 'Home';
   const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
@@ -75,8 +77,31 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
-    if (session) getAttendanceSummary('elayone-main-choir').then(setAttendanceSummary).catch(() => undefined);
+    if (!session) {
+      setAnnouncements([]);
+      setHasNewAnnouncements(false);
+      return;
+    }
+
+    getAttendanceSummary('elayone-main-choir').then(setAttendanceSummary).catch(() => undefined);
+    import('./src/api').then(({ getAnnouncements }) => getAnnouncements('elayone-main-choir'))
+      .then((nextAnnouncements) => {
+        setAnnouncements(nextAnnouncements);
+        setHasNewAnnouncements(nextAnnouncements.length > 0);
+      })
+      .catch(() => undefined);
   }, [session]);
+
+  function handleNotificationsPress() {
+    if (announcements.length === 0) {
+      Alert.alert('No updates', 'There are no new announcements yet.');
+      return;
+    }
+
+    setHasNewAnnouncements(false);
+    const latest = announcements[0];
+    Alert.alert(latest.priority === 'IMPORTANT' ? 'Important announcement' : 'New announcement', `${latest.title}\n\n${latest.message}`);
+  }
 
   if (!authReady) return <View style={styles.loadingScreen}><ActivityIndicator color={COLORS.ink} /></View>;
   if (!session) return <AuthScreen onAuthenticated={setSession} />;
@@ -87,14 +112,19 @@ export default function App() {
       <View style={styles.appShell}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>
-            <View style={styles.brandMark}><Text style={styles.brandMarkText}>E</Text></View>
+            <View style={styles.brandMark}>
+              <Image source={require('./elayone.jpg')} style={styles.brandLogo} resizeMode="cover" />
+            </View>
             <View style={styles.brandCopy}>
               <Text style={styles.brandName}>ELAYONE MUSIC</Text>
               <Text style={styles.brandSub}>GOSPEL MUSIC MINISTRY</Text>
             </View>
-            <TouchableOpacity style={styles.notificationButton} accessibilityLabel="Sign out" onPress={() => signOut().then(() => setSession(null))}>
+            <TouchableOpacity style={styles.notificationButton} accessibilityLabel="View announcements" onPress={handleNotificationsPress}>
               <Ionicons name="notifications-outline" size={21} color={COLORS.ink} />
-              <View style={styles.notificationDot} />
+              {hasNewAnnouncements && <View style={styles.notificationDot} />}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.signOutButton} accessibilityLabel="Sign out" onPress={() => signOut().then(() => setSession(null))}>
+              <Ionicons name="log-out-outline" size={18} color={COLORS.ink} />
             </TouchableOpacity>
           </View>
 
@@ -148,7 +178,7 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Admin' ? <AdminPanel /> : (
+          ) : activeTab === 'Admin' ? <AdminPanel onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [nextAnnouncement, ...current]); setHasNewAnnouncements(true); }} /> : (
             <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} />
           )}
         </ScrollView>
@@ -164,11 +194,12 @@ export default function App() {
   );
 }
 
-function AdminPanel() {
+function AdminPanel({ onAnnouncementPublished }: { onAnnouncementPublished: (announcement: { id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }) => void }) {
   const [eventTitle, setEventTitle] = useState('');
   const [eventLocation, setEventLocation] = useState('');
   const [newsTitle, setNewsTitle] = useState('');
   const [newsMessage, setNewsMessage] = useState('');
+  const [priority, setPriority] = useState<'NORMAL' | 'IMPORTANT'>('NORMAL');
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -187,7 +218,24 @@ function AdminPanel() {
   async function publishNews() {
     if (!newsTitle || !newsMessage) return Alert.alert('Missing details', 'Add a headline and message.');
     setBusy(true);
-    try { await publishAnnouncement(choirId, { title: newsTitle, message: newsMessage, priority: 'NORMAL' }); setNewsTitle(''); setNewsMessage(''); Alert.alert('News published', 'Your announcement is now available to the choir.'); } catch (error) { Alert.alert('Could not publish', error instanceof Error ? error.message : 'Try again.'); } finally { setBusy(false); }
+    try {
+      await publishAnnouncement(choirId, { title: newsTitle, message: newsMessage, priority });
+      onAnnouncementPublished({
+        id: `${Date.now()}`,
+        title: newsTitle,
+        message: newsMessage,
+        priority,
+        createdAt: new Date().toISOString(),
+      });
+      setNewsTitle('');
+      setNewsMessage('');
+      setPriority('NORMAL');
+      Alert.alert('News published', 'Your announcement is now available to the choir.');
+    } catch (error) {
+      Alert.alert('Could not publish', error instanceof Error ? error.message : 'Try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   function removeMember() {
@@ -354,10 +402,21 @@ const styles = StyleSheet.create({
   appShell: { flex: 1, backgroundColor: COLORS.paper },
   scrollContent: { paddingHorizontal: 22, paddingTop: 16, paddingBottom: 100 },
   topBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 34 },
-  brandMark: { width: 37, height: 37, borderRadius: 19, backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center' },
+  brandMark: { width: 37, height: 37, borderRadius: 19, overflow: 'hidden', backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center' },
+  brandLogo: { width: 37, height: 37, borderRadius: 19 },
   brandMarkText: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700', fontStyle: 'italic' },
   brandCopy: { marginLeft: 10, flex: 1 }, brandName: { color: COLORS.ink, fontSize: 13, fontWeight: '800', letterSpacing: 1.8 }, brandSub: { color: COLORS.muted, fontSize: 8, fontWeight: '700', letterSpacing: 1.25, marginTop: 3 },
-  notificationButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' }, notificationDot: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.clay, right: 10, top: 9 },
+  notificationButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  signOutButton: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  notificationDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.clay, right: 8, top: 6, borderWidth: 2, borderColor: COLORS.white },
+  newsInput: { minHeight: 88, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, paddingHorizontal: 12, paddingVertical: 10, textAlignVertical: 'top', color: COLORS.ink, fontSize: 13, marginBottom: 12 },
+  priorityRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  priorityOption: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  priorityOptionActive: { borderColor: COLORS.ink, backgroundColor: '#f2f4f0' },
+  priorityOptionActiveImportant: { borderColor: COLORS.clay, backgroundColor: '#f7efed' },
+  priorityText: { color: COLORS.muted, fontSize: 11, fontWeight: '700' },
+  priorityTextActive: { color: COLORS.ink },
+  priorityTextActiveImportant: { color: COLORS.clay },
   hero: { marginBottom: 25 }, eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, color: COLORS.muted, marginBottom: 13 }, heroTitle: { fontFamily: 'Georgia', fontSize: 43, lineHeight: 47, color: COLORS.ink, letterSpacing: -1 }, heroBody: { fontSize: 14, color: COLORS.muted, marginTop: 13, lineHeight: 21 },
   nextRehearsalCard: { backgroundColor: COLORS.white, borderRadius: 5, padding: 20, borderWidth: 1, borderColor: '#eeece7', marginBottom: 29 }, cardTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.25 }, livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ec', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginRight: 5 }, liveText: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, rehearsalTitle: { fontFamily: 'Georgia', fontSize: 24, color: COLORS.ink, marginTop: 19 }, detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 }, detailText: { color: COLORS.muted, fontSize: 12, marginLeft: 5 }, detailIcon: { marginLeft: 14 }, cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, marginTop: 19, paddingTop: 15 }, avatarStack: { flexDirection: 'row', width: 62 }, avatar: { width: 25, height: 25, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.white, justifyContent: 'center', alignItems: 'center' }, avatarText: { fontSize: 9, fontWeight: '800', color: COLORS.ink }, attendanceText: { color: COLORS.muted, fontSize: 11, flex: 1 }, checkInButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ink, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 3, gap: 7 }, checkInText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }, sectionTitle: { fontFamily: 'Georgia', color: COLORS.ink, fontSize: 21 }, sectionCaption: { fontSize: 11, color: COLORS.muted, marginTop: 4 }, seeAll: { color: COLORS.ink, fontSize: 12, fontWeight: '800', textDecorationLine: 'underline' }, weekGrid: { flexDirection: 'row', gap: 8, marginBottom: 31 }, weekMetric: { flex: 1, backgroundColor: COLORS.white, borderWidth: 1, borderColor: '#eeece7', padding: 13, borderRadius: 4 }, metricNumber: { fontFamily: 'Georgia', fontSize: 30, color: COLORS.ink }, metricPercent: { fontFamily: 'Georgia', fontSize: 17 }, metricLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.8, marginTop: 7 }, metricRule: { height: 3, backgroundColor: COLORS.ink, width: 26, marginTop: 12, marginBottom: 8 }, metricFoot: { color: COLORS.muted, fontSize: 9 }, quickGrid: { gap: 8 }, quickAction: { backgroundColor: COLORS.white, borderColor: COLORS.line, borderWidth: 1, minHeight: 55, borderRadius: 4, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11 }, quickIcon: { width: 33, height: 33, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, quickLabel: { color: COLORS.ink, fontWeight: '700', fontSize: 13, flex: 1 },
