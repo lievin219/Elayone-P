@@ -68,6 +68,7 @@ export default function App() {
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
   const [announcements, setAnnouncements] = useState<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>([]);
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const showHome = activeTab === 'Home';
   const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
@@ -80,6 +81,7 @@ export default function App() {
     if (!session) {
       setAnnouncements([]);
       setHasNewAnnouncements(false);
+      setShowNotifications(false);
       return;
     }
 
@@ -93,14 +95,8 @@ export default function App() {
   }, [session]);
 
   function handleNotificationsPress() {
-    if (announcements.length === 0) {
-      Alert.alert('No updates', 'There are no new announcements yet.');
-      return;
-    }
-
     setHasNewAnnouncements(false);
-    const latest = announcements[0];
-    Alert.alert(latest.priority === 'IMPORTANT' ? 'Important announcement' : 'New announcement', `${latest.title}\n\n${latest.message}`);
+    setShowNotifications(true);
   }
 
   if (!authReady) return <View style={styles.loadingScreen}><ActivityIndicator color={COLORS.ink} /></View>;
@@ -128,7 +124,9 @@ export default function App() {
             </TouchableOpacity>
           </View>
 
-          {showHome ? (
+          {showNotifications ? (
+            <NotificationsPanel announcements={announcements} onClose={() => setShowNotifications(false)} />
+          ) : showHome ? (
             <>
               <View style={styles.hero}>
                 <Text style={styles.eyebrow}>MONDAY, 18 AUGUST 2025</Text>
@@ -243,6 +241,10 @@ function AdminPanel({ onAnnouncementPublished }: { onAnnouncementPublished: (ann
   }
 
   return <View><Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text><Text style={styles.pageTitle}>Lead the ministry</Text><Text style={styles.pageCaption}>Keep the choir informed, prepared, and cared for.</Text><View style={styles.adminNotice}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.olive} /><View style={{ flex: 1 }}><Text style={styles.adminNoticeTitle}>Leader access</Text><Text style={styles.adminNoticeText}>Your changes are shared with the whole choir.</Text></View></View><AdminForm title="All registered users" icon="people-circle-outline"><View style={styles.directoryHeader}><Text style={styles.directoryCount}>{users.length}</Text><Text style={styles.directoryLabel}>accounts</Text><TouchableOpacity onPress={() => { setUsersLoading(true); getAllUsers().then(setUsers).finally(() => setUsersLoading(false)); }}><Ionicons name="refresh-outline" size={19} color={COLORS.ink} /></TouchableOpacity></View>{usersLoading ? <ActivityIndicator color={COLORS.ink} /> : users.length === 0 ? <Text style={styles.adminHelp}>No registered users yet.</Text> : users.map((user) => <View key={user.id} style={styles.directoryRow}><View style={styles.directoryAvatar}><Text style={styles.directoryInitial}>{user.name.slice(0, 1).toUpperCase()}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{user.name}</Text><Text style={styles.personRole}>{user.email}</Text><Text style={styles.directoryMeta}>{user.role} · {user.memberships.length} choir membership{user.memberships.length === 1 ? '' : 's'}</Text></View></View>)}</AdminForm><AdminForm title="Add an event" icon="calendar-outline"><Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Full choir rehearsal" /><Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" /><TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add event</Text></TouchableOpacity></AdminForm><AdminForm title="Publish news" icon="megaphone-outline"><Field label="HEADLINE" value={newsTitle} onChangeText={setNewsTitle} placeholder="A note for the choir" /><Field label="MESSAGE" value={newsMessage} onChangeText={setNewsMessage} placeholder="Write your announcement" multiline /><TouchableOpacity style={styles.adminButton} onPress={publishNews} disabled={busy}><Ionicons name="paper-plane-outline" size={16} color={COLORS.white} /><Text style={styles.adminButtonText}>Publish news</Text></TouchableOpacity></AdminForm><AdminForm title="Member management" icon="people-outline"><Text style={styles.adminHelp}>Remove singers who are no longer part of Elayone Choir. This action cannot be undone.</Text><TouchableOpacity style={styles.removeButton} onPress={removeMember}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /><Text style={styles.removeButtonText}>Manage members</Text></TouchableOpacity></AdminForm></View>;
+}
+
+function NotificationsPanel({ announcements, onClose }: { announcements: Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>; onClose: () => void }) {
+  return <View style={styles.notificationsPanel}><View style={styles.notificationsHeader}><View><Text style={styles.pageEyebrow}>ELAYONE / ALERTS</Text><Text style={styles.pageTitle}>Notifications</Text></View><TouchableOpacity onPress={onClose} style={styles.closeButton}><Ionicons name="close" size={18} color={COLORS.ink} /></TouchableOpacity></View>{announcements.length === 0 ? <View style={styles.emptyState}><Ionicons name="notifications-off-outline" size={24} color={COLORS.muted} /><Text style={styles.emptyStateTitle}>No announcements yet</Text><Text style={styles.emptyStateText}>Your choir updates will show up here when they are published.</Text></View> : announcements.map((item) => <View key={item.id} style={styles.notificationCard}><View style={styles.notificationTop}><Text style={styles.notificationLabel}>{item.priority === 'IMPORTANT' ? 'IMPORTANT' : 'UPDATE'}</Text><Text style={styles.notificationTime}>{new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></View><Text style={styles.notificationTitle}>{item.title}</Text><Text style={styles.notificationMessage}>{item.message}</Text></View>)}</View>;
 }
 
 function AdminForm({ title, icon, children }: { title: string; icon: IconName; children: React.ReactNode }) {
@@ -418,6 +420,18 @@ const styles = StyleSheet.create({
   priorityTextActive: { color: COLORS.ink },
   priorityTextActiveImportant: { color: COLORS.clay },
   hero: { marginBottom: 25 }, eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, color: COLORS.muted, marginBottom: 13 }, heroTitle: { fontFamily: 'Georgia', fontSize: 43, lineHeight: 47, color: COLORS.ink, letterSpacing: -1 }, heroBody: { fontSize: 14, color: COLORS.muted, marginTop: 13, lineHeight: 21 },
+  notificationsPanel: { paddingTop: 10 },
+  notificationsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  closeButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#f0efe9', alignItems: 'center', justifyContent: 'center' },
+  emptyState: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 22, alignItems: 'center' },
+  emptyStateTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18, marginTop: 12, marginBottom: 6 },
+  emptyStateText: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  notificationCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 15, marginBottom: 12 },
+  notificationTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  notificationLabel: { color: COLORS.olive, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
+  notificationTime: { color: COLORS.muted, fontSize: 10 },
+  notificationTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18, marginBottom: 6 },
+  notificationMessage: { color: COLORS.muted, fontSize: 12, lineHeight: 19 },
   nextRehearsalCard: { backgroundColor: COLORS.white, borderRadius: 5, padding: 20, borderWidth: 1, borderColor: '#eeece7', marginBottom: 29 }, cardTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.25 }, livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ec', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginRight: 5 }, liveText: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, rehearsalTitle: { fontFamily: 'Georgia', fontSize: 24, color: COLORS.ink, marginTop: 19 }, detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 }, detailText: { color: COLORS.muted, fontSize: 12, marginLeft: 5 }, detailIcon: { marginLeft: 14 }, cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, marginTop: 19, paddingTop: 15 }, avatarStack: { flexDirection: 'row', width: 62 }, avatar: { width: 25, height: 25, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.white, justifyContent: 'center', alignItems: 'center' }, avatarText: { fontSize: 9, fontWeight: '800', color: COLORS.ink }, attendanceText: { color: COLORS.muted, fontSize: 11, flex: 1 }, checkInButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ink, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 3, gap: 7 }, checkInText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }, sectionTitle: { fontFamily: 'Georgia', color: COLORS.ink, fontSize: 21 }, sectionCaption: { fontSize: 11, color: COLORS.muted, marginTop: 4 }, seeAll: { color: COLORS.ink, fontSize: 12, fontWeight: '800', textDecorationLine: 'underline' }, weekGrid: { flexDirection: 'row', gap: 8, marginBottom: 31 }, weekMetric: { flex: 1, backgroundColor: COLORS.white, borderWidth: 1, borderColor: '#eeece7', padding: 13, borderRadius: 4 }, metricNumber: { fontFamily: 'Georgia', fontSize: 30, color: COLORS.ink }, metricPercent: { fontFamily: 'Georgia', fontSize: 17 }, metricLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.8, marginTop: 7 }, metricRule: { height: 3, backgroundColor: COLORS.ink, width: 26, marginTop: 12, marginBottom: 8 }, metricFoot: { color: COLORS.muted, fontSize: 9 }, quickGrid: { gap: 8 }, quickAction: { backgroundColor: COLORS.white, borderColor: COLORS.line, borderWidth: 1, minHeight: 55, borderRadius: 4, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11 }, quickIcon: { width: 33, height: 33, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, quickLabel: { color: COLORS.ink, fontWeight: '700', fontSize: 13, flex: 1 },
   bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 82, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10 }, navItem: { alignItems: 'center', width: 75 }, navIconWrap: { width: 31, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, navIconActive: { backgroundColor: COLORS.ink }, navLabel: { color: COLORS.muted, fontSize: 10, marginTop: 6 }, navLabelActive: { color: COLORS.ink, fontWeight: '800' },
