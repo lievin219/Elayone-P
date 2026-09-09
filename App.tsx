@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { AttendanceSummary, createRehearsal, DirectoryUser, getAllUsers, getAttendanceSummary, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
 
@@ -52,10 +53,10 @@ const attendanceRoster = [
 ];
 
 const songs = [
-  { title: 'Iminsi yose', key: 'Key of D', status: 'Ready', icon: 'musical-notes-outline' as IconName },
-  { title: 'None urabikoze', key: 'Key of G', status: 'Learn', icon: 'book-outline' as IconName },
-  { title: 'Jambo', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName },
-  { title: 'umvugutire', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName },
+  { title: 'Iminsi yose', key: 'Key of D', status: 'Ready', icon: 'musical-notes-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
+  { title: 'None urabikoze', key: 'Key of G', status: 'Learn', icon: 'book-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
+  { title: 'Jambo', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
+  { title: 'umvugutire', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' },
 ];
 
 export default function App() {
@@ -69,6 +70,52 @@ export default function App() {
   const [announcements, setAnnouncements] = useState<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>([]);
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [nowPlaying, setNowPlaying] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeIOS: InterruptionModeIOS.DoNotMix, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, shouldDuckAndroid: true });
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, []);
+
+  async function playSong(songTitle: string, previewUrl: string) {
+    try {
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
+
+      const { sound } = await Audio.Sound.createAsync({ uri: previewUrl }, { shouldPlay: true, isLooping: false, volume: 1 });
+      soundRef.current = sound;
+      setNowPlaying(songTitle);
+      setIsPlaying(true);
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!('isLoaded' in status) || !status.isLoaded) return;
+        if (status.didJustFinish) {
+          setIsPlaying(false);
+          setNowPlaying(null);
+        }
+      });
+    } catch {
+      Alert.alert('Playback unavailable', 'This song preview could not be played right now.');
+    }
+  }
+
+  async function togglePlayback(songTitle: string, previewUrl: string) {
+    if (nowPlaying === songTitle && isPlaying) {
+      if (soundRef.current) {
+        await soundRef.current.pauseAsync();
+      }
+      setIsPlaying(false);
+      return;
+    }
+
+    await playSong(songTitle, previewUrl);
+  }
 
   const showHome = activeTab === 'Home';
   const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
@@ -328,7 +375,47 @@ function AdminMemberList({ peopleList, onRemovePerson }: { peopleList: typeof pe
 function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void }) {
   const heading = tab === 'Rehearsals' ? 'Rehearsals' : tab === 'People' ? 'The choir' : 'Song library';
   const caption = tab === 'Rehearsals' ? 'A prepared choir is a present choir.' : tab === 'People' ? '24 voices, one offering.' : 'Songs we carry together.';
-  return <View><Text style={styles.pageEyebrow}>ELAYONE / {tab.toUpperCase()}</Text><Text style={styles.pageTitle}>{heading}</Text><Text style={styles.pageCaption}>{caption}</Text>{tab === 'Rehearsals' && <><TouchableOpacity style={styles.addButton}><Ionicons name="add" size={19} color={COLORS.white} /><Text style={styles.addButtonText}>Add rehearsal</Text></TouchableOpacity><Text style={styles.listLabel}>AUGUST 2025</Text>{rehearsals.map((item) => <TouchableOpacity key={item.title} style={[styles.rehearsalListItem, selectedRehearsal === item.title && styles.rehearsalListSelected]} onPress={() => setSelectedRehearsal(item.title)}><View style={[styles.dateBlock, { backgroundColor: item.color }]}><Text style={styles.dateDay}>{item.day}</Text><Text style={styles.dateNumber}>{item.date}</Text><Text style={styles.dateMonth}>{item.month}</Text></View><View style={styles.listMain}><Text style={styles.listTitle}>{item.title}</Text><Text style={styles.listMeta}>{item.time}  ·  {item.room}</Text><Text style={styles.listAttendance}>{item.count} attending</Text></View><Ionicons name={selectedRehearsal === item.title ? 'checkmark-circle' : 'chevron-forward'} size={20} color={selectedRehearsal === item.title ? COLORS.olive : COLORS.muted} /></TouchableOpacity>)}</>}{tab === 'People' && <><View style={styles.peopleSummary}><Text style={styles.peopleNumber}>24</Text><View><Text style={styles.peopleTitle}>Active singers</Text><Text style={styles.peopleCaption}>4 section leaders · 3 vocal sections</Text></View></View>{people.map((person) => <View key={person.name} style={styles.personRow}><View style={[styles.personAvatar, { backgroundColor: person.tone }]}><Text style={styles.personInitials}>{person.initials}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.role}</Text></View><Ionicons name="ellipsis-horizontal" size={20} color={COLORS.muted} /></View>)}</>}{tab === 'Songs' && <><View style={styles.songFeatured}><View style={styles.songIconLarge}><Ionicons name="musical-notes" size={25} color={COLORS.white} /></View><View style={{ flex: 1 }}><Text style={styles.songFeatureLabel}>CURRENTLY LEARNING</Text><Text style={styles.songFeatureTitle}>Imbaraga Zayo</Text><Text style={styles.songFeatureMeta}>Key of G  ·  62% complete</Text></View><Ionicons name="play-circle-outline" size={29} color={COLORS.white} /></View>{songs.map((song) => <View key={song.title} style={styles.songRow}><View style={styles.songIcon}><Ionicons name={song.icon} size={19} color={COLORS.ink} /></View><View style={styles.songInfo}><Text style={styles.songTitle}>{song.title}</Text><Text style={styles.songMeta}>{song.key}</Text></View><View style={[styles.songStatus, song.status === 'Ready' && styles.readyStatus]}><Text style={[styles.songStatusText, song.status === 'Ready' && styles.readyStatusText]}>{song.status}</Text></View></View>)}</>}</View>;
+  const [activeSong, setActiveSong] = useState<string | null>(null);
+  const [isSongPlaying, setIsSongPlaying] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, []);
+
+  async function toggleSong(song: (typeof songs)[number]) {
+    try {
+      if (activeSong === song.title && isSongPlaying && soundRef.current) {
+        await soundRef.current.pauseAsync();
+        setIsSongPlaying(false);
+        return;
+      }
+
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
+
+      const { sound } = await Audio.Sound.createAsync({ uri: song.previewUrl }, { shouldPlay: true, isLooping: false, volume: 1 });
+      soundRef.current = sound;
+      setActiveSong(song.title);
+      setIsSongPlaying(true);
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!('isLoaded' in status) || !status.isLoaded) return;
+        if (status.didJustFinish) {
+          setIsSongPlaying(false);
+          setActiveSong(null);
+        }
+      });
+    } catch {
+      Alert.alert('Playback unavailable', 'This song preview could not be played right now.');
+    }
+  }
+
+  return <View><Text style={styles.pageEyebrow}>ELAYONE / {tab.toUpperCase()}</Text><Text style={styles.pageTitle}>{heading}</Text><Text style={styles.pageCaption}>{caption}</Text>{tab === 'Rehearsals' && <><TouchableOpacity style={styles.addButton}><Ionicons name="add" size={19} color={COLORS.white} /><Text style={styles.addButtonText}>Add rehearsal</Text></TouchableOpacity><Text style={styles.listLabel}>AUGUST 2025</Text>{rehearsals.map((item) => <TouchableOpacity key={item.title} style={[styles.rehearsalListItem, selectedRehearsal === item.title && styles.rehearsalListSelected]} onPress={() => setSelectedRehearsal(item.title)}><View style={[styles.dateBlock, { backgroundColor: item.color }]}><Text style={styles.dateDay}>{item.day}</Text><Text style={styles.dateNumber}>{item.date}</Text><Text style={styles.dateMonth}>{item.month}</Text></View><View style={styles.listMain}><Text style={styles.listTitle}>{item.title}</Text><Text style={styles.listMeta}>{item.time}  ·  {item.room}</Text><Text style={styles.listAttendance}>{item.count} attending</Text></View><Ionicons name={selectedRehearsal === item.title ? 'checkmark-circle' : 'chevron-forward'} size={20} color={selectedRehearsal === item.title ? COLORS.olive : COLORS.muted} /></TouchableOpacity>)}</>}{tab === 'People' && <><View style={styles.peopleSummary}><Text style={styles.peopleNumber}>24</Text><View><Text style={styles.peopleTitle}>Active singers</Text><Text style={styles.peopleCaption}>4 section leaders · 3 vocal sections</Text></View></View>{people.map((person) => <View key={person.name} style={styles.personRow}><View style={[styles.personAvatar, { backgroundColor: person.tone }]}><Text style={styles.personInitials}>{person.initials}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.role}</Text></View><Ionicons name="ellipsis-horizontal" size={20} color={COLORS.muted} /></View>)}</>}{tab === 'Songs' && <><View style={styles.songFeatured}><View style={styles.songIconLarge}><Ionicons name="musical-notes" size={25} color={COLORS.white} /></View><View style={{ flex: 1 }}><Text style={styles.songFeatureLabel}>CURRENTLY LEARNING</Text><Text style={styles.songFeatureTitle}>Imbaraga Zayo</Text><Text style={styles.songFeatureMeta}>Key of G  ·  62% complete</Text></View><TouchableOpacity onPress={() => toggleSong(songs[0])} accessibilityLabel="Play featured song"><Ionicons name={activeSong === songs[0].title && isSongPlaying ? 'pause-circle-outline' : 'play-circle-outline'} size={29} color={COLORS.white} /></TouchableOpacity></View>{songs.map((song) => <View key={song.title} style={styles.songRow}><View style={styles.songIcon}><Ionicons name={song.icon} size={19} color={COLORS.ink} /></View><View style={styles.songInfo}><Text style={styles.songTitle}>{song.title}</Text><Text style={styles.songMeta}>{song.key}</Text></View><View style={[styles.songStatus, song.status === 'Ready' && styles.readyStatus]}><Text style={[styles.songStatusText, song.status === 'Ready' && styles.readyStatusText]}>{song.status}</Text></View><TouchableOpacity onPress={() => toggleSong(song)} style={styles.songPlayButton} accessibilityLabel={`Play ${song.title}`}><Ionicons name={activeSong === song.title && isSongPlaying ? 'pause' : 'play'} size={16} color={COLORS.ink} /></TouchableOpacity></View>)}</>}</View>;
 }
 
 const COLORS = { ink: '#171717', muted: '#797975', line: '#e5e3de', paper: '#f7f7f5', white: '#ffffff', olive: '#708067', clay: '#a76e5b' };
@@ -435,5 +522,5 @@ const styles = StyleSheet.create({
   nextRehearsalCard: { backgroundColor: COLORS.white, borderRadius: 5, padding: 20, borderWidth: 1, borderColor: '#eeece7', marginBottom: 29 }, cardTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.25 }, livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ec', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginRight: 5 }, liveText: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, rehearsalTitle: { fontFamily: 'Georgia', fontSize: 24, color: COLORS.ink, marginTop: 19 }, detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 }, detailText: { color: COLORS.muted, fontSize: 12, marginLeft: 5 }, detailIcon: { marginLeft: 14 }, cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, marginTop: 19, paddingTop: 15 }, avatarStack: { flexDirection: 'row', width: 62 }, avatar: { width: 25, height: 25, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.white, justifyContent: 'center', alignItems: 'center' }, avatarText: { fontSize: 9, fontWeight: '800', color: COLORS.ink }, attendanceText: { color: COLORS.muted, fontSize: 11, flex: 1 }, checkInButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ink, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 3, gap: 7 }, checkInText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }, sectionTitle: { fontFamily: 'Georgia', color: COLORS.ink, fontSize: 21 }, sectionCaption: { fontSize: 11, color: COLORS.muted, marginTop: 4 }, seeAll: { color: COLORS.ink, fontSize: 12, fontWeight: '800', textDecorationLine: 'underline' }, weekGrid: { flexDirection: 'row', gap: 8, marginBottom: 31 }, weekMetric: { flex: 1, backgroundColor: COLORS.white, borderWidth: 1, borderColor: '#eeece7', padding: 13, borderRadius: 4 }, metricNumber: { fontFamily: 'Georgia', fontSize: 30, color: COLORS.ink }, metricPercent: { fontFamily: 'Georgia', fontSize: 17 }, metricLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.8, marginTop: 7 }, metricRule: { height: 3, backgroundColor: COLORS.ink, width: 26, marginTop: 12, marginBottom: 8 }, metricFoot: { color: COLORS.muted, fontSize: 9 }, quickGrid: { gap: 8 }, quickAction: { backgroundColor: COLORS.white, borderColor: COLORS.line, borderWidth: 1, minHeight: 55, borderRadius: 4, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11 }, quickIcon: { width: 33, height: 33, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, quickLabel: { color: COLORS.ink, fontWeight: '700', fontSize: 13, flex: 1 },
   bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 82, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10 }, navItem: { alignItems: 'center', width: 75 }, navIconWrap: { width: 31, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, navIconActive: { backgroundColor: COLORS.ink }, navLabel: { color: COLORS.muted, fontSize: 10, marginTop: 6 }, navLabelActive: { color: COLORS.ink, fontWeight: '800' },
-  pageEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 12 }, pageTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 38 }, pageCaption: { color: COLORS.muted, fontSize: 14, marginTop: 8, marginBottom: 24 }, addButton: { backgroundColor: COLORS.ink, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 3, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 7, marginBottom: 28 }, addButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' }, listLabel: { color: COLORS.muted, fontSize: 10, letterSpacing: 1.4, fontWeight: '800', marginBottom: 10 }, rehearsalListItem: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, padding: 10, borderRadius: 4, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, rehearsalListSelected: { borderColor: COLORS.olive, borderWidth: 1.5 }, dateBlock: { width: 48, height: 61, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 12 }, dateDay: { color: COLORS.white, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, dateNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 24, lineHeight: 25 }, dateMonth: { color: COLORS.white, fontSize: 8, fontWeight: '800' }, listMain: { flex: 1 }, listTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, listMeta: { color: COLORS.muted, fontSize: 10, marginTop: 5 }, listAttendance: { color: COLORS.olive, fontSize: 10, fontWeight: '700', marginTop: 6 }, peopleSummary: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 19, flexDirection: 'row', alignItems: 'center', marginBottom: 22 }, peopleNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 45, marginRight: 16 }, peopleTitle: { color: COLORS.white, fontSize: 15, fontWeight: '800' }, peopleCaption: { color: '#aaa9a3', fontSize: 11, marginTop: 5 }, personRow: { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.line, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }, personAvatar: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 }, personInitials: { color: COLORS.ink, fontSize: 12, fontWeight: '800' }, personInfo: { flex: 1 }, personName: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, personRole: { color: COLORS.muted, fontSize: 11, marginTop: 4 }, songFeatured: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 17, flexDirection: 'row', alignItems: 'center', marginBottom: 21 }, songIconLarge: { width: 45, height: 45, backgroundColor: COLORS.clay, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 13 }, songFeatureLabel: { color: '#b7b5ad', fontSize: 8, fontWeight: '800', letterSpacing: 1.2 }, songFeatureTitle: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 20, marginTop: 6 }, songFeatureMeta: { color: '#b7b5ad', fontSize: 10, marginTop: 5 }, songRow: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, songIcon: { width: 36, height: 36, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, songInfo: { flex: 1 }, songTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 }, songMeta: { color: COLORS.muted, fontSize: 10, marginTop: 4 }, songStatus: { backgroundColor: '#f4e7e2', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, readyStatus: { backgroundColor: '#eef2ec' }, songStatusText: { color: COLORS.clay, fontSize: 9, fontWeight: '800' }, readyStatusText: { color: COLORS.olive },
+  pageEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 12 }, pageTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 38 }, pageCaption: { color: COLORS.muted, fontSize: 14, marginTop: 8, marginBottom: 24 }, addButton: { backgroundColor: COLORS.ink, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 3, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 7, marginBottom: 28 }, addButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' }, listLabel: { color: COLORS.muted, fontSize: 10, letterSpacing: 1.4, fontWeight: '800', marginBottom: 10 }, rehearsalListItem: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, padding: 10, borderRadius: 4, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, rehearsalListSelected: { borderColor: COLORS.olive, borderWidth: 1.5 }, dateBlock: { width: 48, height: 61, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 12 }, dateDay: { color: COLORS.white, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, dateNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 24, lineHeight: 25 }, dateMonth: { color: COLORS.white, fontSize: 8, fontWeight: '800' }, listMain: { flex: 1 }, listTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, listMeta: { color: COLORS.muted, fontSize: 10, marginTop: 5 }, listAttendance: { color: COLORS.olive, fontSize: 10, fontWeight: '700', marginTop: 6 }, peopleSummary: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 19, flexDirection: 'row', alignItems: 'center', marginBottom: 22 }, peopleNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 45, marginRight: 16 }, peopleTitle: { color: COLORS.white, fontSize: 15, fontWeight: '800' }, peopleCaption: { color: '#aaa9a3', fontSize: 11, marginTop: 5 }, personRow: { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.line, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }, personAvatar: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 }, personInitials: { color: COLORS.ink, fontSize: 12, fontWeight: '800' }, personInfo: { flex: 1 }, personName: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, personRole: { color: COLORS.muted, fontSize: 11, marginTop: 4 }, songFeatured: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 17, flexDirection: 'row', alignItems: 'center', marginBottom: 21 }, songIconLarge: { width: 45, height: 45, backgroundColor: COLORS.clay, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 13 }, songFeatureLabel: { color: '#b7b5ad', fontSize: 8, fontWeight: '800', letterSpacing: 1.2 }, songFeatureTitle: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 20, marginTop: 6 }, songFeatureMeta: { color: '#b7b5ad', fontSize: 10, marginTop: 5 }, songRow: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, songIcon: { width: 36, height: 36, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, songInfo: { flex: 1 }, songTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 }, songMeta: { color: COLORS.muted, fontSize: 10, marginTop: 4 }, songStatus: { backgroundColor: '#f4e7e2', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, readyStatus: { backgroundColor: '#eef2ec' }, songStatusText: { color: COLORS.clay, fontSize: 9, fontWeight: '800' }, readyStatusText: { color: COLORS.olive }, songPlayButton: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginLeft: 10 }, 
 });
