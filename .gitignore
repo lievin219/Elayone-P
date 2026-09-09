@@ -1,2 +1,14 @@
 node_modules
-.env.example
+
+# Local environment files (never commit real secrets)
+.env
+.env.*
+.env.local
+.env.local.*
+server/.env
+server/.env.*
+
+# Keep example files tracked so teammates can copy them
+!.env.example
+!.env.local.example
+!server/.env.example

@@ -3,9 +3,17 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+function getRequiredEnv(name: string) {
+  const value = process.env[name];
+  if (!value || !value.trim()) {
+    throw new Error(`Missing required environment variable: ${name}. Set it in server/.env before seeding.`);
+  }
+  return value.trim();
+}
+
 async function main() {
-  const adminEmail = 'admin@elayone.com';
-  const adminPassword = 'ElayoneAdmin123!';
+  const adminEmail = getRequiredEnv('ADMIN_EMAIL');
+  const adminPassword = getRequiredEnv('ADMIN_PASSWORD');
   const passwordHash = await bcrypt.hash(adminPassword, 12);
   const choir = await prisma.choir.upsert(
     { where: { id: 'elayone-main-choir' }, update: {}, create: { id: 'elayone-main-choir', name: 'Elayone Choir', description: 'A choir serving with one voice.' } }
@@ -24,7 +32,7 @@ async function main() {
   await prisma.attendance.upsert({ where: { rehearsalId_userId: { rehearsalId: rehearsal.id, userId: admin.id } }, update: { status: 'YES', present: true }, create: { rehearsalId: rehearsal.id, userId: admin.id, status: 'YES', present: true } });
   const announcementClient = (prisma as unknown as { announcement: { upsert: (args: { where: { id: string }; update: Record<string, never>; create: { id: string; choirId: string; title: string; message: string; priority: string } }) => Promise<unknown> } }).announcement;
   await announcementClient.upsert({ where: { id: 'elayone-welcome-announcement' }, update: {}, create: { id: 'elayone-welcome-announcement', choirId: choir.id, title: 'Welcome to the new season', message: 'Please confirm your availability before each rehearsal.', priority: 'IMPORTANT' } });
-  console.log(`Seeded Elayone Choir. Admin login: ${admin.email} / ${adminPassword}`);
+  console.log(`Seeded Elayone Choir. Admin login: ${admin.email}`);
   console.log(`${director2.name} (${director2.email}) role=${director2.role}`);
 }
 
