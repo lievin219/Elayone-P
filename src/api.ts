@@ -68,6 +68,23 @@ export async function getAnnouncements(choirId: string) {
   return request<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>(`/api/choirs/${choirId}/announcements`, { headers: await authHeaders() });
 }
 
+export type SongRecord = {
+  id: string;
+  title: string;
+  key: string | null;
+  status: string;
+  notes?: string | null;
+  previewUrl?: string | null;
+};
+
+export async function getSongs(choirId: string): Promise<SongRecord[]> {
+  return request<SongRecord[]>(`/api/choirs/${choirId}/songs`, { headers: await authHeaders() });
+}
+
+export async function createSong(choirId: string, data: { title: string; key?: string; status?: string; previewUrl?: string; notes?: string }) {
+  return request<SongRecord>(`/api/choirs/${choirId}/songs`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
+}
+
 export type AttendanceSummary = { total: number; confirmed: number; rate: number; upcoming: number };
 
 export async function getAttendanceSummary(choirId: string): Promise<AttendanceSummary> {

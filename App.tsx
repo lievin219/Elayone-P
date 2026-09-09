@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { AttendanceSummary, createRehearsal, DirectoryUser, getAllUsers, getAttendanceSummary, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
+import { AttendanceSummary, createRehearsal, createSong, DirectoryUser, getAllUsers, getAttendanceSummary, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Admin';
@@ -52,11 +52,21 @@ const attendanceRoster = [
   { name: 'Eric Ishimwe', part: 'Tenor', status: 'Away', tone: '#b3bdc9' },
 ];
 
-const songs = [
-  { title: 'Iminsi yose', key: 'Key of D', status: 'Ready', icon: 'musical-notes-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
-  { title: 'None urabikoze', key: 'Key of G', status: 'Learn', icon: 'book-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
-  { title: 'Jambo', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
-  { title: 'umvugutire', key: 'Key of F', status: 'Ready', icon: 'musical-notes-outline' as IconName, previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' },
+type SongItem = {
+  id?: string;
+  title: string;
+  key: string | null;
+  status: string;
+  notes?: string | null;
+  previewUrl?: string | null;
+  icon?: IconName;
+};
+
+const seedSongs: SongItem[] = [
+  { title: 'Iminsi yose', key: 'Key of D', status: 'READY', icon: 'musical-notes-outline', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
+  { title: 'None urabikoze', key: 'Key of G', status: 'LEARN', icon: 'book-outline', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
+  { title: 'Jambo', key: 'Key of F', status: 'READY', icon: 'musical-notes-outline', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
+  { title: 'umvugutire', key: 'Key of F', status: 'READY', icon: 'musical-notes-outline', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' },
 ];
 
 export default function App() {
@@ -68,6 +78,7 @@ export default function App() {
   const [visiblePeople, setVisiblePeople] = useState(people);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
   const [announcements, setAnnouncements] = useState<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>([]);
+  const [songs, setSongs] = useState<SongItem[]>(seedSongs);
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<string | null>(null);
@@ -133,12 +144,19 @@ export default function App() {
     }
 
     getAttendanceSummary('elayone-main-choir').then(setAttendanceSummary).catch(() => undefined);
-    import('./src/api').then(({ getAnnouncements }) => getAnnouncements('elayone-main-choir'))
-      .then((nextAnnouncements) => {
+    import('./src/api').then(({ getAnnouncements, getSongs }) => Promise.all([
+      getAnnouncements('elayone-main-choir'),
+      getSongs('elayone-main-choir')
+    ]))
+      .then(([nextAnnouncements, nextSongs]) => {
         setAnnouncements(nextAnnouncements);
         setHasNewAnnouncements(nextAnnouncements.length > 0);
+        setSongs(nextSongs.length > 0 ? nextSongs.map((song) => ({ ...song, icon: song.status === 'LEARN' ? 'book-outline' : 'musical-notes-outline' })) : seedSongs);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        setAnnouncements([]);
+        setSongs(seedSongs);
+      });
   }, [session]);
 
   function handleNotificationsPress() {
@@ -223,8 +241,8 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Admin' ? <AdminPanel onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [nextAnnouncement, ...current]); setHasNewAnnouncements(true); }} /> : (
-            <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} />
+          ) : activeTab === 'Admin' ? <AdminPanel onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [nextAnnouncement, ...current]); setHasNewAnnouncements(true); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} /> : (
+            <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
         <View style={styles.bottomNav}>
@@ -239,11 +257,16 @@ export default function App() {
   );
 }
 
-function AdminPanel({ onAnnouncementPublished }: { onAnnouncementPublished: (announcement: { id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }) => void }) {
+function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPublished: (announcement: { id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }) => void; onSongAdded: (song: SongItem) => void }) {
   const [eventTitle, setEventTitle] = useState('');
   const [eventLocation, setEventLocation] = useState('');
   const [newsTitle, setNewsTitle] = useState('');
   const [newsMessage, setNewsMessage] = useState('');
+  const [songTitle, setSongTitle] = useState('');
+  const [songKey, setSongKey] = useState('');
+  const [songPreviewUrl, setSongPreviewUrl] = useState('');
+  const [songStatus, setSongStatus] = useState<'READY' | 'LEARN'>('READY');
+  const [songNotes, setSongNotes] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'IMPORTANT'>('NORMAL');
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<DirectoryUser[]>([]);
@@ -352,8 +375,8 @@ function QuickAction({ icon, label, onPress }: { icon: IconName; label: string; 
   return <TouchableOpacity style={styles.quickAction} onPress={onPress}><View style={styles.quickIcon}><Ionicons name={icon} size={20} color={COLORS.ink} /></View><Text style={styles.quickLabel}>{label}</Text><Ionicons name="arrow-forward" size={15} color={COLORS.muted} /></TouchableOpacity>;
 }
 
-function TabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void }) {
-  return <><BaseTabView tab={tab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onRemovePerson={onRemovePerson} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selectedRehearsal} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
+function TabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
+  return <><BaseTabView tab={tab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onRemovePerson={onRemovePerson} songList={songList} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selectedRehearsal} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
 }
 
 function AttendanceRoster({ rehearsal }: { rehearsal: string }) {
@@ -372,7 +395,7 @@ function AdminMemberList({ peopleList, onRemovePerson }: { peopleList: typeof pe
   return <View style={styles.adminMembers}><Text style={styles.adminMembersTitle}>MANAGE MEMBERS</Text>{peopleList.map((person) => <View key={person.id} style={styles.adminMemberRow}><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part} · {person.role}</Text></View><TouchableOpacity style={styles.removeIconButton} onPress={() => removePerson(person)} accessibilityLabel={`Remove ${person.name}`}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /></TouchableOpacity></View>)}</View>;
 }
 
-function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void }) {
+function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
   const heading = tab === 'Rehearsals' ? 'Rehearsals' : tab === 'People' ? 'The choir' : 'Song library';
   const caption = tab === 'Rehearsals' ? 'A prepared choir is a present choir.' : tab === 'People' ? '24 voices, one offering.' : 'Songs we carry together.';
   const [activeSong, setActiveSong] = useState<string | null>(null);
@@ -387,7 +410,12 @@ function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList,
     };
   }, []);
 
-  async function toggleSong(song: (typeof songs)[number]) {
+  async function toggleSong(song: SongItem) {
+    if (!song.previewUrl) {
+      Alert.alert('No preview available', 'This song does not have a preview link yet.');
+      return;
+    }
+
     try {
       if (activeSong === song.title && isSongPlaying && soundRef.current) {
         await soundRef.current.pauseAsync();

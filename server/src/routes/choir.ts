@@ -65,4 +65,20 @@ router.get('/:choirId/songs', async (request, response) => {
   return response.json(await prisma.song.findMany({ where: { choirId: request.params.choirId }, orderBy: { title: 'asc' } }));
 });
 
+router.post('/:choirId/songs', requireAdmin, async (request, response) => {
+  const { title, key, status, notes, previewUrl } = request.body;
+  if (!title || !title.trim()) return response.status(400).json({ message: 'Song title is required.' });
+  const song = await prisma.song.create({
+    data: {
+      choirId: String(request.params.choirId),
+      title: String(title).trim(),
+      key: key ? String(key).trim() : null,
+      status: status === 'READY' || status === 'LEARN' ? status : 'LEARN',
+      notes: notes ? String(notes).trim() : null,
+      previewUrl: previewUrl ? String(previewUrl).trim() : null,
+    },
+  });
+  return response.status(201).json(song);
+});
+
 export default router;

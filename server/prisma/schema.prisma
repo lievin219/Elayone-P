@@ -119,12 +119,13 @@ model Assignment {
 }
 
 model Song {
-  id        String   @id @default(cuid())
-  choirId   String
-  title     String
-  key       String?
-  status    String   @default("LEARN")
-  notes     String?
-  choir     Choir    @relation(fields: [choirId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  choirId    String
+  title      String
+  key        String?
+  status     String   @default("LEARN")
+  notes      String?
+  previewUrl String?
+  choir      Choir    @relation(fields: [choirId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
 }
