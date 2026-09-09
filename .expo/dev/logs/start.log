@@ -611,3 +611,4 @@
 {"_e":"metro:bundling:progress","_t":1788938131848,"id":"4","progress":0,"total":1,"current":0}
 {"_e":"metro:bundling:progress","_t":1788938131857,"id":"4","progress":0,"total":1,"current":0}
 {"_e":"metro:bundling:done","_t":1788938131901,"id":"4","total":1,"ms":53.234089}
+{"_e":"metro:server_log","_t":1788939121597,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","host.exp.exponent","Pixel 4a - 13 - API 33","60"]}
