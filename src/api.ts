@@ -1,4 +1,60 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+const webStorage = {
+  async getItemAsync(key: string): Promise<string | null> {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem(key);
+  },
+  async setItemAsync(key: string, value: string): Promise<void> {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(key, value);
+    }
+  },
+  async deleteItemAsync(key: string): Promise<void> {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(key);
+    }
+  },
+};
+
+async function safeStorageGet(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return webStorage.getItemAsync(key);
+  }
+
+  try {
+    return await SecureStore.getItemAsync(key);
+  } catch {
+    return webStorage.getItemAsync(key);
+  }
+}
+
+async function safeStorageSet(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    await webStorage.setItemAsync(key, value);
+    return;
+  }
+
+  try {
+    await SecureStore.setItemAsync(key, value);
+  } catch {
+    await webStorage.setItemAsync(key, value);
+  }
+}
+
+async function safeStorageDelete(key: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    await webStorage.deleteItemAsync(key);
+    return;
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(key);
+  } catch {
+    await webStorage.deleteItemAsync(key);
+  }
+}
 
 export type User = {
   id: string;
@@ -37,23 +93,23 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export async function signIn(email: string, password: string): Promise<Session> {
   const session = await request<Session>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-  await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
+  await safeStorageSet(SESSION_KEY, JSON.stringify(session));
   return session;
 }
 
 export async function signUp(name: string, email: string, password: string): Promise<Session> {
   const session = await request<Session>('/api/auth/signup', { method: 'POST', body: JSON.stringify({ name, email, password }) });
-  await SecureStore.setItemAsync(SESSION_KEY, JSON.stringify(session));
+  await safeStorageSet(SESSION_KEY, JSON.stringify(session));
   return session;
 }
 
 export async function getStoredSession(): Promise<Session | null> {
-  const value = await SecureStore.getItemAsync(SESSION_KEY);
+  const value = await safeStorageGet(SESSION_KEY);
   return value ? JSON.parse(value) as Session : null;
 }
 
 export async function signOut(): Promise<void> {
-  await SecureStore.deleteItemAsync(SESSION_KEY);
+  await safeStorageDelete(SESSION_KEY);
 }
 
 export async function getChoirPeople(choirId: string) {
