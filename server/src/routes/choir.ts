@@ -36,9 +36,10 @@ router.get('/:choirId/attendance/summary', async (request: AuthRequest, response
 });
 
 router.post('/:choirId/rehearsals', requireAdmin, async (request, response) => {
-  const { title, startsAt, endsAt, location } = request.body;
+  const { title, startsAt, endsAt, location, eventType } = request.body;
   if (!title || !startsAt || !endsAt || !location) return response.status(400).json({ message: 'Title, dates, and location are required.' });
-  const rehearsal = await prisma.rehearsal.create({ data: { choirId: String(request.params.choirId), title, startsAt: new Date(startsAt), endsAt: new Date(endsAt), location } });
+  const normalizedType = ['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT'].includes(eventType) ? eventType : 'REHEARSAL';
+  const rehearsal = await prisma.rehearsal.create({ data: { choirId: String(request.params.choirId), title, eventType: normalizedType, startsAt: new Date(startsAt), endsAt: new Date(endsAt), location } });
   return response.status(201).json(rehearsal);
 });
 

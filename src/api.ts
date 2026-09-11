@@ -154,9 +154,12 @@ export async function createSong(choirId: string, data: { title: string; key?: s
 
 export type AttendanceSummary = { total: number; confirmed: number; rate: number; upcoming: number };
 
+export type EventType = 'SERVICE' | 'REHEARSAL' | 'WORSHIP_NIGHT' | 'SPECIAL_EVENT';
+
 export type RehearsalRecord = {
   id: string;
   title: string;
+  eventType?: EventType;
   location: string;
   startsAt: string;
   endsAt: string;
@@ -179,7 +182,7 @@ export async function updateUserRole(userId: string, role: Role) {
   return request<User>(`/api/users/${userId}/role`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ role }) });
 }
 
-export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string }) {
+export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string; eventType?: EventType }) {
   return request(`/api/choirs/${choirId}/rehearsals`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }
 

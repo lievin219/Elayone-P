@@ -150,7 +150,8 @@ export default function App() {
   const nextRehearsal = activeRehearsal ?? orderedRehearsals.find((item) => new Date(item.startsAt).getTime() > currentTime.getTime()) ?? orderedRehearsals[0] ?? null;
   const nextRehearsalParts = nextRehearsal ? formatRehearsalDate(nextRehearsal.startsAt) : null;
   const upcomingRehearsalCount = orderedRehearsals.filter((item) => new Date(item.startsAt).getTime() >= currentTime.getTime()).length;
-  const liveEventLabel = activeRehearsal ? 'ACTIVE SERVICE' : 'NEXT REHEARSAL';
+  const eventTypeLabel = nextRehearsal?.title?.toLowerCase().includes('worship') ? 'WORSHIP NIGHT' : nextRehearsal?.title?.toLowerCase().includes('service') ? 'SUNDAY SERVICE' : nextRehearsal?.title?.toLowerCase().includes('rehearsal') ? 'REHEARSAL' : nextRehearsal?.title?.toLowerCase().includes('event') ? 'SPECIAL EVENT' : 'ASSIGNMENT';
+  const liveEventLabel = activeRehearsal ? 'ACTIVE SERVICE' : 'NEXT ASSIGNMENT';
   const liveEventState = activeRehearsal ? 'LIVE' : nextRehearsal ? 'UPCOMING' : 'NO EVENT';
   const formattedDate = currentTime.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -255,6 +256,7 @@ export default function App() {
                   <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>{liveEventState}</Text></View>
                 </View>
                 <Text style={styles.rehearsalTitle}>{nextRehearsal?.title ?? 'No rehearsals scheduled yet'}</Text>
+                <Text style={[styles.cardEyebrow, { marginTop: 8, marginBottom: 0 }]}> {eventTypeLabel}</Text>
                 <View style={styles.detailRow}>
                   <Ionicons name="time-outline" size={16} color={COLORS.muted} />
                   <Text style={styles.detailText}>{nextRehearsal ? `${nextRehearsalParts?.start ?? ''} - ${new Date(nextRehearsal.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Add a rehearsal'}</Text>
@@ -317,6 +319,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   const [eventDate, setEventDate] = useState('');
   const [eventStartTime, setEventStartTime] = useState('');
   const [eventEndTime, setEventEndTime] = useState('');
+  const [eventType, setEventType] = useState<'SERVICE' | 'REHEARSAL' | 'WORSHIP_NIGHT' | 'SPECIAL_EVENT'>('REHEARSAL');
   const [newsTitle, setNewsTitle] = useState('');
   const [newsMessage, setNewsMessage] = useState('');
   const [songTitle, setSongTitle] = useState('');
@@ -346,15 +349,16 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
     }
     setBusy(true);
     try {
-      const created = (await createRehearsal(choirId, { title: eventTitle.trim(), location: eventLocation.trim(), startsAt, endsAt })) as Rehearsal;
+      const created = (await createRehearsal(choirId, { title: eventTitle.trim(), location: eventLocation.trim(), startsAt, endsAt, eventType })) as Rehearsal;
       onRehearsalAdded(created);
       setEventTitle('');
       setEventLocation('');
       setEventDate('');
       setEventStartTime('');
       setEventEndTime('');
-      setNotice({ type: 'success', text: 'Rehearsal added successfully and is now visible to the choir.' });
-      Alert.alert('Event added', 'The choir can now see this rehearsal.');
+      setEventType('REHEARSAL');
+      setNotice({ type: 'success', text: 'Event added successfully and is now visible to the choir.' });
+      Alert.alert('Event added', 'The choir can now see this schedule item.');
     } catch (error) {
       setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Unable to add the rehearsal right now.' });
       Alert.alert('Could not add event', error instanceof Error ? error.message : 'Try again.');
@@ -510,6 +514,33 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
             </View>
           );
         })}
+      </AdminForm>
+
+      <AdminForm title="Plan a service or rehearsal" icon="calendar-outline">
+        <Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Sunday service set" />
+        <Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" />
+        <View style={styles.inlineFieldRow}>
+          <Field label="DATE" value={eventDate} onChangeText={setEventDate} placeholder="2026-09-20" />
+        </View>
+        <View style={styles.inlineFieldRow}>
+          <Field label="START TIME" value={eventStartTime} onChangeText={setEventStartTime} placeholder="18:00" />
+          <Field label="END TIME" value={eventEndTime} onChangeText={setEventEndTime} placeholder="20:00" />
+        </View>
+        <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>EVENT TYPE</Text>
+        <View style={styles.priorityRow}>
+          {(['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT'] as const).map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[styles.priorityOption, eventType === option && styles.priorityOptionActive]}
+              onPress={() => setEventType(option)}
+            >
+              <Text style={[styles.priorityText, eventType === option && styles.priorityTextActive]}>{option.replace('_', ' ')}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}>
+          <Text style={styles.adminButtonText}>{busy ? 'Saving...' : 'Add event'}</Text>
+        </TouchableOpacity>
       </AdminForm>
 
       <AdminForm title="Recent announcements" icon="megaphone-outline">

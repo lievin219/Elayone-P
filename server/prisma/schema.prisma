@@ -27,6 +27,13 @@ enum AttendanceStatus {
   PENDING
 }
 
+enum EventType {
+  SERVICE
+  REHEARSAL
+  WORSHIP_NIGHT
+  SPECIAL_EVENT
+}
+
 enum AnnouncementPriority {
   NORMAL
   IMPORTANT
@@ -73,6 +80,7 @@ model Rehearsal {
   id            String         @id @default(cuid())
   choirId       String
   title         String
+  eventType     EventType      @default(REHEARSAL)
   startsAt      DateTime
   endsAt        DateTime
   location      String
