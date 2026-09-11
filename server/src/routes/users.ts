@@ -25,6 +25,19 @@ router.patch('/:userId/role', requireAdmin, async (request: AuthRequest, respons
     return response.status(400).json({ message: 'A valid role is required: MEMBER, LEADER, or ADMIN.' });
   }
 
+  const targetUser = await prisma.user.findUnique({
+    where: { id: String(request.params.userId) },
+    select: { id: true, email: true, role: true },
+  });
+
+  if (!targetUser) {
+    return response.status(404).json({ message: 'User not found.' });
+  }
+
+  if (targetUser.role === 'ADMIN' && role !== 'ADMIN') {
+    return response.status(403).json({ message: 'Admin accounts are protected and cannot be changed to a normal role.' });
+  }
+
   const user = await prisma.user.update({
     where: { id: String(request.params.userId) },
     data: { role },
