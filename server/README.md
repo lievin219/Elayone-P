@@ -24,6 +24,34 @@ The platform controls who can view and use files and information based on role a
 
 The file-storage system is managed by team leaders, who control access and visibility for each user or role.
 
+## Service assignment workflow
+
+The platform supports planning schedules from weekly services through special events, worship nights, rehearsals, and broader ministry activity.
+
+- Weekly services
+- Multiple services
+- Special events
+- Worship nights
+- Rehearsals
+- Other ministry events
+
+Leader → assigns John to Sunday service
+John → receives notification
+John → opens service
+John → accepts or declines
+
+This gives the leader visibility into who is actually available, and the system can notify volunteers when they are assigned to a service.
+
+Instead of: “Hey John, are you available Sunday?” the scheduling system sends the assignment and lets John respond directly.
+
+## Music Stand integration
+
+The platform connects with Music Stand, which is designed for musicians.
+
+Planning → service flow → Music Stand → musicians prepare and perform
+
+The idea is to build once and reuse the same information across the WorshipTools ecosystem.
+
 Routes:
 
 - `POST /api/auth/signup`

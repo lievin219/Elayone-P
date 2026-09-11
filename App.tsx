@@ -141,8 +141,17 @@ export default function App() {
   const showHome = activeTab === 'Home';
   const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
   const welcomeName = session?.user.name?.split(' ')[0] ?? 'Choir member';
-  const nextRehearsal = rehearsals[0] ?? null;
+  const orderedRehearsals = [...rehearsals].sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+  const activeRehearsal = orderedRehearsals.find((item) => {
+    const start = new Date(item.startsAt).getTime();
+    const end = new Date(item.endsAt).getTime();
+    return currentTime.getTime() >= start && currentTime.getTime() <= end;
+  }) ?? null;
+  const nextRehearsal = activeRehearsal ?? orderedRehearsals.find((item) => new Date(item.startsAt).getTime() > currentTime.getTime()) ?? orderedRehearsals[0] ?? null;
   const nextRehearsalParts = nextRehearsal ? formatRehearsalDate(nextRehearsal.startsAt) : null;
+  const upcomingRehearsalCount = orderedRehearsals.filter((item) => new Date(item.startsAt).getTime() >= currentTime.getTime()).length;
+  const liveEventLabel = activeRehearsal ? 'ACTIVE SERVICE' : 'NEXT REHEARSAL';
+  const liveEventState = activeRehearsal ? 'LIVE' : nextRehearsal ? 'UPCOMING' : 'NO EVENT';
   const formattedDate = currentTime.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const dailyVerse = [
@@ -242,8 +251,8 @@ export default function App() {
 
               <View style={styles.nextRehearsalCard}>
                 <View style={styles.cardTopLine}>
-                  <Text style={styles.cardEyebrow}>NEXT REHEARSAL</Text>
-                  <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>{nextRehearsal ? 'UPCOMING' : 'NO EVENT'}</Text></View>
+                  <Text style={styles.cardEyebrow}>{liveEventLabel}</Text>
+                  <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>{liveEventState}</Text></View>
                 </View>
                 <Text style={styles.rehearsalTitle}>{nextRehearsal?.title ?? 'No rehearsals scheduled yet'}</Text>
                 <View style={styles.detailRow}>
@@ -269,9 +278,9 @@ export default function App() {
                 <TouchableOpacity onPress={() => setActiveTab('Rehearsals')}><Text style={styles.seeAll}>See all</Text></TouchableOpacity>
               </View>
               <View style={styles.weekGrid}>
-                <View style={styles.weekMetric}><Text style={styles.metricNumber}>{String(attendanceSummary.upcoming).padStart(2, '0')}</Text><Text style={styles.metricLabel}>REHEARSALS</Text><View style={styles.metricRule} /><Text style={styles.metricFoot}>upcoming</Text></View>
+                <View style={styles.weekMetric}><Text style={styles.metricNumber}>{String(upcomingRehearsalCount).padStart(2, '0')}</Text><Text style={styles.metricLabel}>REHEARSALS</Text><View style={styles.metricRule} /><Text style={styles.metricFoot}>upcoming</Text></View>
                 <View style={styles.weekMetric}><Text style={styles.metricNumber}>{attendanceSummary.rate}<Text style={styles.metricPercent}>%</Text></Text><Text style={styles.metricLabel}>ATTENDANCE</Text><View style={[styles.metricRule, { backgroundColor: COLORS.olive }]} /><Text style={styles.metricFoot}>{attendanceSummary.total} responses</Text></View>
-                <View style={styles.weekMetric}><Text style={styles.metricNumber}>04</Text><Text style={styles.metricLabel}>NEW SONGS</Text><View style={[styles.metricRule, { backgroundColor: COLORS.clay }]} /><Text style={styles.metricFoot}>in the library</Text></View>
+                <View style={styles.weekMetric}><Text style={styles.metricNumber}>{String(songs.length).padStart(2, '0')}</Text><Text style={styles.metricLabel}>SONGS</Text><View style={[styles.metricRule, { backgroundColor: COLORS.clay }]} /><Text style={styles.metricFoot}>in the library</Text></View>
               </View>
 
               <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Quick access</Text><Text style={styles.sectionCaption}>What do you need today?</Text></View></View>
