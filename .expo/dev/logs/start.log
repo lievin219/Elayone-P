@@ -1183,3 +1183,33 @@
 {"_e":"metro:client_log","_t":1789063139234,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
 {"_e":"metro:client_log","_t":1789063139234,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
 {"_e":"metro:client_log","_t":1789063141933,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
+{"_e":"metro:bundling:started","_t":1789064665182,"id":"9","platform":"web","environment":null,"entry":"node_modules/expo/AppEntry.js"}
+{"_e":"metro:bundling:progress","_t":1789064665195,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789064665232,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789064667137,"id":"9","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1789064667274,"id":"9","total":1,"ms":2083.120875}
+{"_e":"metro:client_log","_t":1789064667865,"level":"info","data":["%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools","font-weight:bold"]}
+{"_e":"metro:client_log","_t":1789064667865,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
+{"_e":"metro:client_log","_t":1789064667866,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
+{"_e":"metro:client_log","_t":1789064828984,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
+{"_e":"root:init","_t":1789106405192,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1789106405196,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789106405208,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://10.156.0.35:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"devserver:start","_t":1789106407622,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789106409946,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789106411163,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789106413102,"atlas":false,"workers":3,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789106416843,"id":"1","platform":"web","environment":null,"entry":"node_modules/expo/AppEntry.js"}
+{"_e":"metro:bundling:progress","_t":1789106416843,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789106416849,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789106416949,"id":"1","progress":0.0625,"total":32,"current":8}
+{"_e":"metro:bundling:progress","_t":1789106417049,"id":"1","progress":0.08250339520144863,"total":94,"current":27}
+{"_e":"metro:bundling:progress","_t":1789106417150,"id":"1","progress":0.31077421059585153,"total":174,"current":97}
+{"_e":"metro:bundling:progress","_t":1789106417249,"id":"1","progress":0.691988409429086,"total":226,"current":188}
+{"_e":"metro:bundling:progress","_t":1789106417349,"id":"1","progress":0.8134213267104631,"total":316,"current":285}
+{"_e":"metro:bundling:progress","_t":1789106417449,"id":"1","progress":0.9768123825956873,"total":343,"current":339}
+{"_e":"metro:bundling:done","_t":1789106417544,"id":"1","total":343,"ms":700.994504}
+{"_e":"metro:client_log","_t":1789106418303,"level":"info","data":["%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools","font-weight:bold"]}
+{"_e":"metro:client_log","_t":1789106418310,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
+{"_e":"metro:client_log","_t":1789106418312,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
+{"_e":"metro:client_log","_t":1789106432085,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
