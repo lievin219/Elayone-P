@@ -1213,3 +1213,25 @@
 {"_e":"metro:client_log","_t":1789106418310,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
 {"_e":"metro:client_log","_t":1789106418312,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
 {"_e":"metro:client_log","_t":1789106432085,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
+{"_e":"root:init","_t":1789107329086,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1789107329090,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1789107329096,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://192.168.1.70:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"devserver:start","_t":1789107331513,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1789107333644,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1789107334693,"plugins":[]}
+{"_e":"metro:instantiate","_t":1789107337146,"atlas":false,"workers":3,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1789107339166,"id":"1","platform":"web","environment":null,"entry":"node_modules/expo/AppEntry.js"}
+{"_e":"metro:bundling:progress","_t":1789107339167,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789107339176,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1789107339280,"id":"1","progress":0.019024970273483946,"total":29,"current":4}
+{"_e":"metro:bundling:progress","_t":1789107339381,"id":"1","progress":0.08287419651056016,"total":66,"current":19}
+{"_e":"metro:bundling:progress","_t":1789107339481,"id":"1","progress":0.2787315304193511,"total":161,"current":85}
+{"_e":"metro:bundling:progress","_t":1789107339583,"id":"1","progress":0.7199265381083564,"total":231,"current":196}
+{"_e":"metro:bundling:progress","_t":1789107339683,"id":"1","progress":0.7795885952058701,"total":299,"current":264}
+{"_e":"metro:bundling:progress","_t":1789107339821,"id":"1","progress":0.9761913299150203,"total":334,"current":330}
+{"_e":"metro:bundling:done","_t":1789107339922,"id":"1","total":334,"ms":755.041526}
+{"_e":"metro:client_log","_t":1789107340324,"level":"info","data":["%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools","font-weight:bold"]}
+{"_e":"metro:client_log","_t":1789107340339,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
+{"_e":"metro:client_log","_t":1789107340339,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
+{"_e":"metro:client_log","_t":1789107394697,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
+{"_e":"metro:client_log","_t":1789107499591,"level":"warn","data":["\"shadow*\" style props are deprecated. Use \"boxShadow\"."]}

@@ -388,32 +388,34 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
   }
 
   return <SafeAreaView style={styles.authSafeArea}>
-    <StatusBar barStyle="light-content" />
+    <StatusBar barStyle="dark-content" />
     <KeyboardAvoidingView style={styles.authShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
-        <Image source={require('./elayone.jpg')} style={styles.authBrandMark} accessibilityLabel="Elayone Music logo" />
-        <Text style={styles.authBrand}>ELAYONE MUSIC</Text>
-        <Text style={styles.authBrandSub}>GOSPEL MUSIC MINISTRY</Text>
-        <View style={styles.authRule} />
-        <Text style={styles.authTitle}>{mode === 'login' ? 'Welcome back.' : 'Join the choir.'}</Text>
-        <Text style={styles.authCaption}>{mode === 'login' ? 'Sign in to stay in rhythm with your ministry.' : 'Create your member account and serve with one voice.'}</Text>
-        {mode === 'signup' && <Field label="FULL NAME" value={name} onChangeText={setName} placeholder="Your name" />}
-        <Field label="EMAIL ADDRESS" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" />
-        <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry />
-        {error ? <Text style={styles.authError}>{error}</Text> : null}
-        <TouchableOpacity style={styles.authButton} onPress={submit} disabled={busy}>
-          {busy ? <ActivityIndicator color={COLORS.white} /> : <><Text style={styles.authButtonText}>{mode === 'login' ? 'Sign in' : 'Create account'}</Text><Ionicons name="arrow-forward" size={17} color={COLORS.white} /></>}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.authSwitch} onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>
-          <Text style={styles.authSwitchText}>{mode === 'login' ? 'New to Elayone? ' : 'Already have an account? '}<Text style={styles.authSwitchStrong}>{mode === 'login' ? 'Create an account' : 'Sign in'}</Text></Text>
-        </TouchableOpacity>
+        <View style={styles.authCard}>
+          <Image source={require('./elayone.jpg')} style={styles.authBrandMark} accessibilityLabel="Elayone Music logo" />
+          <Text style={styles.authBrand}>ELAYONE MUSIC</Text>
+          <Text style={styles.authBrandSub}>GOSPEL MUSIC MINISTRY</Text>
+          <View style={styles.authRule} />
+          <Text style={styles.authTitle}>{mode === 'login' ? 'Welcome back.' : 'Join the choir.'}</Text>
+          <Text style={styles.authCaption}>{mode === 'login' ? 'Sign in to stay in rhythm with your ministry.' : 'Create your member account and serve with one voice.'}</Text>
+          {mode === 'signup' && <Field label="FULL NAME" value={name} onChangeText={setName} placeholder="Your name" />}
+          <Field label="EMAIL ADDRESS" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" />
+          <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry />
+          {error ? <Text style={styles.authError}>{error}</Text> : null}
+          <TouchableOpacity style={styles.authButton} onPress={submit} disabled={busy}>
+            {busy ? <ActivityIndicator color={COLORS.white} /> : <><Text style={styles.authButtonText}>{mode === 'login' ? 'Sign in' : 'Create account'}</Text><Ionicons name="arrow-forward" size={17} color={COLORS.white} /></>}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.authSwitch} onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>
+            <Text style={styles.authSwitchText}>{mode === 'login' ? 'New to Elayone? ' : 'Already have an account? '}<Text style={styles.authSwitchStrong}>{mode === 'login' ? 'Create an account' : 'Sign in'}</Text></Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView>;
 }
 
 function Field({ label, value, onChangeText, placeholder, ...props }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string } & Omit<React.ComponentProps<typeof TextInput>, 'value' | 'onChangeText' | 'placeholder'>) {
-  return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput {...props} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#8b8b88" style={styles.fieldInput} /></View>;
+  return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput {...props} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#8b8b88" selectionColor="#171717" style={[styles.fieldInput, props.multiline && styles.fieldInputMultiline]} /></View>;
 }
 
 function QuickAction({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
@@ -520,24 +522,26 @@ const COLORS = { ink: '#171717', muted: '#797975', line: '#e5e3de', paper: '#f7f
 
 const styles = StyleSheet.create({
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.paper },
-  authSafeArea: { flex: 1, backgroundColor: COLORS.ink },
-  authShell: { flex: 1 },
-  authContent: { flexGrow: 1, paddingHorizontal: 27, paddingTop: 46, paddingBottom: 35 },
-  authBrandMark: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.white },
-  authBrand: { color: COLORS.white, fontSize: 15, fontWeight: '800', letterSpacing: 2.8, marginTop: 14 },
-  authBrandSub: { color: '#aaa9a3', fontSize: 9, fontWeight: '700', letterSpacing: 1.8, marginTop: 4 },
-  authRule: { height: 1, backgroundColor: '#3b3b39', marginTop: 40, marginBottom: 38 },
-  authTitle: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 41, lineHeight: 47 },
-  authCaption: { color: '#aaa9a3', fontSize: 14, lineHeight: 21, marginTop: 11, marginBottom: 31, maxWidth: 290 },
-  field: { marginBottom: 19 },
-  fieldLabel: { color: '#aaa9a3', fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginBottom: 8 },
-  fieldInput: { height: 49, borderWidth: 1, borderColor: '#4c4c49', borderRadius: 3, color: COLORS.white, fontSize: 14, paddingHorizontal: 14 },
-  authError: { color: '#e1a89a', fontSize: 12, marginTop: -5, marginBottom: 16, lineHeight: 18 },
-  authButton: { backgroundColor: COLORS.white, minHeight: 51, borderRadius: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 7 },
-  authButtonText: { color: COLORS.ink, fontSize: 13, fontWeight: '800' },
-  authSwitch: { alignItems: 'center', marginTop: 25 },
-  authSwitchText: { color: '#aaa9a3', fontSize: 12 },
-  authSwitchStrong: { color: COLORS.white, fontWeight: '800' },
+  authSafeArea: { flex: 1, backgroundColor: '#f4efe8' },
+  authShell: { flex: 1, justifyContent: 'center' },
+  authContent: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 34, paddingBottom: 40, justifyContent: 'center' },
+  authCard: { backgroundColor: COLORS.white, borderRadius: 22, paddingHorizontal: 22, paddingTop: 28, paddingBottom: 24, borderWidth: 1, borderColor: '#efeae2', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 5 },
+  authBrandMark: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#f2efe9', alignSelf: 'center' },
+  authBrand: { color: COLORS.ink, fontSize: 15, fontWeight: '800', letterSpacing: 2.8, marginTop: 14, textAlign: 'center' },
+  authBrandSub: { color: COLORS.muted, fontSize: 9, fontWeight: '700', letterSpacing: 1.8, marginTop: 4, textAlign: 'center' },
+  authRule: { height: 1, backgroundColor: '#eae5df', marginTop: 30, marginBottom: 26 },
+  authTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 39, lineHeight: 45 },
+  authCaption: { color: COLORS.muted, fontSize: 14, lineHeight: 21, marginTop: 10, marginBottom: 26 },
+  field: { marginBottom: 18 },
+  fieldLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginBottom: 8 },
+  fieldInput: { height: 52, borderWidth: 1, borderColor: '#d9d5cf', borderRadius: 12, color: COLORS.ink, backgroundColor: '#faf8f4', fontSize: 14, paddingHorizontal: 14, paddingVertical: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 },
+  fieldInputMultiline: { minHeight: 96, textAlignVertical: 'top', paddingTop: 14 },
+  authError: { color: '#a14a3b', fontSize: 12, marginTop: -4, marginBottom: 16, lineHeight: 18 },
+  authButton: { backgroundColor: COLORS.ink, minHeight: 52, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, marginTop: 8 },
+  authButtonText: { color: COLORS.white, fontSize: 13, fontWeight: '800' },
+  authSwitch: { alignItems: 'center', marginTop: 22 },
+  authSwitchText: { color: COLORS.muted, fontSize: 12 },
+  authSwitchStrong: { color: COLORS.ink, fontWeight: '800' },
   adminNotice: { backgroundColor: '#eef2ec', borderRadius: 4, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 17 },
   adminNoticeTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
   adminNoticeText: { color: COLORS.muted, fontSize: 10, marginTop: 3 },
@@ -601,11 +605,11 @@ const styles = StyleSheet.create({
   notificationButton: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center', position: 'relative' },
   signOutButton: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
   notificationDot: { position: 'absolute', width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.clay, right: 8, top: 6, borderWidth: 2, borderColor: COLORS.white },
-  newsInput: { minHeight: 88, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, paddingHorizontal: 12, paddingVertical: 10, textAlignVertical: 'top', color: COLORS.ink, fontSize: 13, marginBottom: 12 },
+  newsInput: { minHeight: 96, borderWidth: 1, borderColor: '#d9d5cf', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, textAlignVertical: 'top', color: COLORS.ink, backgroundColor: '#faf8f4', fontSize: 13, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 },
   priorityRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  priorityOption: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
-  priorityOptionActive: { borderColor: COLORS.ink, backgroundColor: '#f2f4f0' },
-  priorityOptionActiveImportant: { borderColor: COLORS.clay, backgroundColor: '#f7efed' },
+  priorityOption: { flex: 1, borderWidth: 1, borderColor: '#d9d5cf', borderRadius: 10, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#faf8f4' },
+  priorityOptionActive: { borderColor: COLORS.ink, backgroundColor: '#eef2ec' },
+  priorityOptionActiveImportant: { borderColor: COLORS.clay, backgroundColor: '#f8efee' },
   priorityText: { color: COLORS.muted, fontSize: 11, fontWeight: '700' },
   priorityTextActive: { color: COLORS.ink },
   priorityTextActiveImportant: { color: COLORS.clay },
@@ -616,8 +620,8 @@ const styles = StyleSheet.create({
   emptyState: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 22, alignItems: 'center' },
   emptyStateTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18, marginTop: 12, marginBottom: 6 },
   emptyStateText: { color: COLORS.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  songSearchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12 },
-  songSearchInput: { flex: 1, color: COLORS.ink, fontSize: 13, paddingLeft: 10 },
+  songSearchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#faf8f4', borderWidth: 1, borderColor: '#d9d5cf', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 2, elevation: 1 },
+  songSearchInput: { flex: 1, color: COLORS.ink, fontSize: 13, paddingLeft: 10, paddingVertical: 8 },
   rehearsalMainTouch: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   attendanceRow: { flexDirection: 'row', marginTop: 12, gap: 8 },
   attendancePill: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, backgroundColor: COLORS.paper, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
