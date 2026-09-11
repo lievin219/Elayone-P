@@ -16,27 +16,23 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { AttendanceSummary, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, getAllUsers, getAttendanceSummary, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp, updateUserRole } from './src/api';
+import { AttendanceSummary, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, getAllUsers, getAttendanceSummary, getRehearsals, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, RehearsalRecord, Session, signIn, signOut, signUp, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Admin';
 
-type Rehearsal = {
-  day: string;
-  date: string;
-  month: string;
-  title: string;
-  time: string;
-  room: string;
-  count: string;
-  color: string;
-};
+type Rehearsal = RehearsalRecord & { color: string };
 
-const rehearsals: Rehearsal[] = [
-  { day: 'MON', date: '18', month: 'AUG', title: 'Sunday service set', time: '18:00 - 20:00', room: 'Main sanctuary', count: '18/24', color: '#1c1c1c' },
-  { day: 'WED', date: '20', month: 'AUG', title: 'Sectionals: soprano + alto', time: '17:30 - 19:00', room: 'Choir room', count: '12/12', color: '#c9b99a' },
-  { day: 'SAT', date: '23', month: 'AUG', title: 'Full choir rehearsal', time: '09:00 - 12:00', room: 'Main sanctuary', count: '24/24', color: '#82746a' },
-];
+function formatRehearsalDate(input: string) {
+  const date = new Date(input);
+  const day = date.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase();
+  const dateNumber = date.toLocaleDateString(undefined, { day: '2-digit' });
+  const month = date.toLocaleDateString(undefined, { month: 'short' }).toUpperCase();
+  const start = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return { day, dateNumber, month, start };
+}
+
+const rehearsalColors = ['#1c1c1c', '#c9b99a', '#82746a', '#8c9d85', '#c7916d'];
 
 const people = [
   { id: 'director-id', name: 'Serge', role: 'Choir director', initials: 'AM', tone: '#d7c5af', part: 'Soprano', availability: 'YES' },
@@ -83,10 +79,11 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('Home');
-  const [selectedRehearsal, setSelectedRehearsal] = useState<string>('Sunday service set');
+  const [selectedRehearsal, setSelectedRehearsal] = useState<string>('');
   const [checkedIn, setCheckedIn] = useState(false);
   const [visiblePeople, setVisiblePeople] = useState(people);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
+  const [rehearsals, setRehearsals] = useState<Rehearsal[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [songs, setSongs] = useState<SongItem[]>(seedSongs);
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false);
@@ -144,6 +141,8 @@ export default function App() {
   const showHome = activeTab === 'Home';
   const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
   const welcomeName = session?.user.name?.split(' ')[0] ?? 'Choir member';
+  const nextRehearsal = rehearsals[0] ?? null;
+  const nextRehearsalParts = nextRehearsal ? formatRehearsalDate(nextRehearsal.startsAt) : null;
   const formattedDate = currentTime.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const dailyVerse = [
@@ -171,21 +170,31 @@ export default function App() {
       return;
     }
 
-    getAttendanceSummary('elayone-main-choir').then(setAttendanceSummary).catch(() => undefined);
-    import('./src/api').then(({ getAnnouncements, getSongs }) => Promise.all([
-      getAnnouncements('elayone-main-choir'),
-      getSongs('elayone-main-choir')
-    ]))
-      .then(([nextAnnouncements, nextSongs]) => {
+    Promise.all([
+      getAttendanceSummary('elayone-main-choir'),
+      getRehearsals('elayone-main-choir'),
+      import('./src/api').then(({ getAnnouncements, getSongs }) => Promise.all([
+        getAnnouncements('elayone-main-choir'),
+        getSongs('elayone-main-choir')
+      ]))
+    ])
+      .then(([summary, nextRehearsals, [nextAnnouncements, nextSongs]]) => {
         const normalizedAnnouncements: AnnouncementItem[] = nextAnnouncements.map((item) => ({
           ...item,
           authorName: item.author?.name ?? 'Elayone team',
         }));
+        setAttendanceSummary(summary);
+        setRehearsals(nextRehearsals.map((rehearsal, index) => ({ ...rehearsal, color: rehearsalColors[index % rehearsalColors.length] })));
+        if (!selectedRehearsal && nextRehearsals[0]) {
+          setSelectedRehearsal(nextRehearsals[0].id);
+        }
         setAnnouncements(normalizedAnnouncements);
         setHasNewAnnouncements(normalizedAnnouncements.length > 0);
         setSongs(nextSongs.length > 0 ? nextSongs.map((song) => ({ ...song, icon: song.status === 'LEARN' ? 'book-outline' : 'musical-notes-outline' })) : seedSongs);
       })
       .catch(() => {
+        setAttendanceSummary({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
+        setRehearsals([]);
         setAnnouncements([]);
         setSongs(seedSongs);
       });
@@ -234,14 +243,14 @@ export default function App() {
               <View style={styles.nextRehearsalCard}>
                 <View style={styles.cardTopLine}>
                   <Text style={styles.cardEyebrow}>NEXT REHEARSAL</Text>
-                  <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>IN 6 HOURS</Text></View>
+                  <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>{nextRehearsal ? 'UPCOMING' : 'NO EVENT'}</Text></View>
                 </View>
-                <Text style={styles.rehearsalTitle}>Sunday service set</Text>
+                <Text style={styles.rehearsalTitle}>{nextRehearsal?.title ?? 'No rehearsals scheduled yet'}</Text>
                 <View style={styles.detailRow}>
                   <Ionicons name="time-outline" size={16} color={COLORS.muted} />
-                  <Text style={styles.detailText}>18:00 - 20:00</Text>
+                  <Text style={styles.detailText}>{nextRehearsal ? `${nextRehearsalParts?.start ?? ''} - ${new Date(nextRehearsal.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Add a rehearsal'}</Text>
                   <Ionicons name="location-outline" size={16} color={COLORS.muted} style={styles.detailIcon} />
-                  <Text style={styles.detailText}>Main sanctuary</Text>
+                  <Text style={styles.detailText}>{nextRehearsal?.location ?? 'No location yet'}</Text>
                 </View>
                 <View style={styles.cardFooter}>
                   <View style={styles.avatarStack}>
@@ -277,8 +286,8 @@ export default function App() {
             const next = current.filter((announcement) => announcement.id !== id);
             setHasNewAnnouncements(next.length > 0);
             return next;
-          }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} /> : (
-            <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
+          }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} onRehearsalAdded={(nextRehearsal) => { setRehearsals((current) => [nextRehearsal, ...current]); setSelectedRehearsal(nextRehearsal.id); }} /> : (
+            <TabView tab={activeTab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
         <View style={styles.bottomNav}>
@@ -293,9 +302,12 @@ export default function App() {
   );
 }
 
-function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, onSongAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; onSongAdded: (song: SongItem) => void }) {
+function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, onSongAdded, onRehearsalAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; onSongAdded: (song: SongItem) => void; onRehearsalAdded: (rehearsal: Rehearsal) => void }) {
   const [eventTitle, setEventTitle] = useState('');
   const [eventLocation, setEventLocation] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventStartTime, setEventStartTime] = useState('');
+  const [eventEndTime, setEventEndTime] = useState('');
   const [newsTitle, setNewsTitle] = useState('');
   const [newsMessage, setNewsMessage] = useState('');
   const [songTitle, setSongTitle] = useState('');
@@ -315,12 +327,23 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   }, []);
 
   async function addEvent() {
-    if (!eventTitle || !eventLocation) return Alert.alert('Missing details', 'Add an event title and location.');
+    if (!eventTitle || !eventLocation || !eventDate || !eventStartTime || !eventEndTime) {
+      return Alert.alert('Missing rehearsal details', 'Add the title, date, start time, end time, and location before saving.');
+    }
+    const startsAt = new Date(`${eventDate}T${eventStartTime}:00`).toISOString();
+    const endsAt = new Date(`${eventDate}T${eventEndTime}:00`).toISOString();
+    if (Number.isNaN(new Date(startsAt).getTime()) || Number.isNaN(new Date(endsAt).getTime())) {
+      return Alert.alert('Invalid schedule', 'Use a valid date and time format for the rehearsal.');
+    }
     setBusy(true);
     try {
-      await createRehearsal(choirId, { title: eventTitle, location: eventLocation, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() });
+      const created = (await createRehearsal(choirId, { title: eventTitle.trim(), location: eventLocation.trim(), startsAt, endsAt })) as Rehearsal;
+      onRehearsalAdded(created);
       setEventTitle('');
       setEventLocation('');
+      setEventDate('');
+      setEventStartTime('');
+      setEventEndTime('');
       setNotice({ type: 'success', text: 'Rehearsal added successfully and is now visible to the choir.' });
       Alert.alert('Event added', 'The choir can now see this rehearsal.');
     } catch (error) {
@@ -597,12 +620,19 @@ function QuickAction({ icon, label, onPress }: { icon: IconName; label: string; 
   return <TouchableOpacity style={styles.quickAction} onPress={onPress}><View style={styles.quickIcon}><Ionicons name={icon} size={20} color={COLORS.ink} /></View><Text style={styles.quickLabel}>{label}</Text><Ionicons name="arrow-forward" size={15} color={COLORS.muted} /></TouchableOpacity>;
 }
 
-function TabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
-  return <><BaseTabView tab={tab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onRemovePerson={onRemovePerson} songList={songList} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selectedRehearsal} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
+function TabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
+  const selected = rehearsals.find((rehearsal) => rehearsal.id === selectedRehearsal) ?? rehearsals[0] ?? null;
+  return <><BaseTabView tab={tab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onRemovePerson={onRemovePerson} songList={songList} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selected} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
 }
 
-function AttendanceRoster({ rehearsal }: { rehearsal: string }) {
-  return <View style={styles.rosterSection}><View style={styles.rosterHeader}><View><Text style={styles.sectionTitle}>Who is coming?</Text><Text style={styles.sectionCaption}>{rehearsal}</Text></View><View style={styles.responseSummary}><Text style={styles.responseNumber}>18</Text><Text style={styles.responseLabel}>YES</Text></View></View><View style={styles.responseBar}><View style={styles.responseYes} /><View style={styles.responseMaybe} /><View style={styles.responseNo} /></View><View style={styles.responseLegend}><Text style={styles.legendYes}>18 coming</Text><Text style={styles.legendMaybe}>3 maybe</Text><Text style={styles.legendNo}>3 away</Text></View>{attendanceRoster.map((person) => <View key={person.name} style={styles.rosterRow}><View style={[styles.rosterAvatar, { backgroundColor: person.tone }]}><Text style={styles.personInitials}>{person.name.split(' ').map((part) => part[0]).join('')}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part}</Text></View><Text style={[styles.rosterStatus, person.status === 'Coming' ? styles.statusComing : person.status === 'Maybe' ? styles.statusMaybe : styles.statusAway]}>{person.status}</Text></View>)}</View>;
+function AttendanceRoster({ rehearsal }: { rehearsal: Rehearsal | null }) {
+  if (!rehearsal) {
+    return <View style={styles.rosterSection}><Text style={styles.sectionTitle}>No rehearsal selected</Text></View>;
+  }
+  const yesCount = rehearsal.attendances?.filter((entry) => entry.status === 'YES').length ?? 0;
+  const maybeCount = rehearsal.attendances?.filter((entry) => entry.status === 'MAYBE').length ?? 0;
+  const noCount = rehearsal.attendances?.filter((entry) => entry.status === 'NO').length ?? 0;
+  return <View style={styles.rosterSection}><View style={styles.rosterHeader}><View><Text style={styles.sectionTitle}>Who is coming?</Text><Text style={styles.sectionCaption}>{rehearsal.title}</Text></View><View style={styles.responseSummary}><Text style={styles.responseNumber}>{yesCount}</Text><Text style={styles.responseLabel}>YES</Text></View></View><View style={styles.responseBar}><View style={[styles.responseYes, { width: `${Math.max(8, (yesCount / Math.max(1, yesCount + maybeCount + noCount)) * 100)}%` }]} /><View style={[styles.responseMaybe, { width: `${Math.max(8, (maybeCount / Math.max(1, yesCount + maybeCount + noCount)) * 100)}%` }]} /><View style={[styles.responseNo, { width: `${Math.max(8, (noCount / Math.max(1, yesCount + maybeCount + noCount)) * 100)}%` }]} /></View><View style={styles.responseLegend}><Text style={styles.legendYes}>{yesCount} coming</Text><Text style={styles.legendMaybe}>{maybeCount} maybe</Text><Text style={styles.legendNo}>{noCount} away</Text></View>{attendanceRoster.map((person) => <View key={person.name} style={styles.rosterRow}><View style={[styles.rosterAvatar, { backgroundColor: person.tone }]}><Text style={styles.personInitials}>{person.name.split(' ').map((part) => part[0]).join('')}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part}</Text></View><Text style={[styles.rosterStatus, person.status === 'Coming' ? styles.statusComing : person.status === 'Maybe' ? styles.statusMaybe : styles.statusAway]}>{person.status}</Text></View>)}</View>;
 }
 
 function AvailabilitySummary() {
@@ -617,7 +647,7 @@ function AdminMemberList({ peopleList, onRemovePerson }: { peopleList: typeof pe
   return <View style={styles.adminMembers}><Text style={styles.adminMembersTitle}>MANAGE MEMBERS</Text>{peopleList.map((person) => <View key={person.id} style={styles.adminMemberRow}><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part} · {person.role}</Text></View><TouchableOpacity style={styles.removeIconButton} onPress={() => removePerson(person)} accessibilityLabel={`Remove ${person.name}`}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /></TouchableOpacity></View>)}</View>;
 }
 
-function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
+function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
   const heading = tab === 'Rehearsals' ? 'Rehearsals' : tab === 'People' ? 'The choir' : 'Song library';
   const caption = tab === 'Rehearsals' ? 'A prepared choir is a present choir.' : tab === 'People' ? '24 voices, one offering.' : 'Songs we carry together.';
   const [activeSong, setActiveSong] = useState<string | null>(null);
@@ -674,23 +704,142 @@ function BaseTabView({ tab, selectedRehearsal, setSelectedRehearsal, peopleList,
     return `${song.title} ${song.key ?? ''} ${song.status}`.toLowerCase().includes(q);
   });
 
-  return <View><Text style={styles.pageEyebrow}>ELAYONE / {tab.toUpperCase()}</Text><Text style={styles.pageTitle}>{heading}</Text><Text style={styles.pageCaption}>{caption}</Text>{tab === 'Rehearsals' && <><TouchableOpacity style={styles.addButton}><Ionicons name="add" size={19} color={COLORS.white} /><Text style={styles.addButtonText}>Add rehearsal</Text></TouchableOpacity><Text style={styles.listLabel}>AUGUST 2025</Text>{rehearsals.map((item) => {
-    const currentStatus = attendanceChoice[item.title];
-    return <View key={item.title} style={[styles.rehearsalListItem, selectedRehearsal === item.title && styles.rehearsalListSelected]}>
-      <TouchableOpacity style={styles.rehearsalMainTouch} onPress={() => setSelectedRehearsal(item.title)}>
-        <View style={[styles.dateBlock, { backgroundColor: item.color }]}><Text style={styles.dateDay}>{item.day}</Text><Text style={styles.dateNumber}>{item.date}</Text><Text style={styles.dateMonth}>{item.month}</Text></View>
-        <View style={styles.listMain}><Text style={styles.listTitle}>{item.title}</Text><Text style={styles.listMeta}>{item.time}  ·  {item.room}</Text><Text style={styles.listAttendance}>{item.count} attending</Text></View>
-        <Ionicons name={selectedRehearsal === item.title ? 'checkmark-circle' : 'chevron-forward'} size={20} color={selectedRehearsal === item.title ? COLORS.olive : COLORS.muted} />
-      </TouchableOpacity>
-      <View style={styles.attendanceRow}>
-        {(['YES', 'MAYBE', 'NO'] as const).map((status) => (
-          <TouchableOpacity key={status} style={[styles.attendancePill, currentStatus === status && styles.attendancePillActive]} onPress={() => setAttendanceChoice((current) => ({ ...current, [item.title]: status }))}>
-            <Text style={[styles.attendancePillText, currentStatus === status && styles.attendancePillTextActive]}>{status === 'YES' ? 'I will' : status === 'MAYBE' ? 'Maybe' : 'No'}</Text>
+  return (
+    <View>
+      <Text style={styles.pageEyebrow}>ELAYONE / {tab.toUpperCase()}</Text>
+      <Text style={styles.pageTitle}>{heading}</Text>
+      <Text style={styles.pageCaption}>{caption}</Text>
+
+      {tab === 'Rehearsals' && (
+        <>
+          <TouchableOpacity style={styles.addButton}>
+            <Ionicons name="add" size={19} color={COLORS.white} />
+            <Text style={styles.addButtonText}>Add rehearsal</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-    </View>;
-  })}</>}{tab === 'People' && <><View style={styles.peopleSummary}><Text style={styles.peopleNumber}>24</Text><View><Text style={styles.peopleTitle}>Active singers</Text><Text style={styles.peopleCaption}>4 section leaders · 3 vocal sections</Text></View></View>{people.map((person) => <View key={person.name} style={styles.personRow}><View style={[styles.personAvatar, { backgroundColor: person.tone }]}><Text style={styles.personInitials}>{person.initials}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.role}</Text></View><Ionicons name="ellipsis-horizontal" size={20} color={COLORS.muted} /></View>)}</>}{tab === 'Songs' && <><View style={styles.songSearchWrap}><Ionicons name="search-outline" size={18} color={COLORS.muted} /><TextInput value={songQuery} onChangeText={setSongQuery} placeholder="Search songs, key, or status" placeholderTextColor={COLORS.muted} style={styles.songSearchInput} /></View>{featuredSong && <View style={styles.songFeatured}><View style={styles.songIconLarge}><Ionicons name="musical-notes" size={25} color={COLORS.white} /></View><View style={{ flex: 1 }}><Text style={styles.songFeatureLabel}>CURRENTLY LEARNING</Text><Text style={styles.songFeatureTitle}>{featuredSong.title}</Text><Text style={styles.songFeatureMeta}>{featuredSong.key ?? 'Key not set'}  ·  {featuredSong.status}</Text></View><TouchableOpacity onPress={() => toggleSong(featuredSong)} accessibilityLabel="Play featured song"><Ionicons name={activeSong === featuredSong.title && isSongPlaying ? 'pause-circle-outline' : 'play-circle-outline'} size={29} color={COLORS.white} /></TouchableOpacity></View>}{filteredSongs.length === 0 ? <View style={styles.emptyState}><Ionicons name="musical-notes-outline" size={24} color={COLORS.muted} /><Text style={styles.emptyStateTitle}>No songs found</Text><Text style={styles.emptyStateText}>Try a different title, key, or status.</Text></View> : filteredSongs.map((song) => <View key={song.title + (song.id ?? '')} style={styles.songRow}><View style={styles.songIcon}><Ionicons name={song.icon ?? 'musical-notes-outline'} size={19} color={COLORS.ink} /></View><View style={styles.songInfo}><Text style={styles.songTitle}>{song.title}</Text><Text style={styles.songMeta}>{song.key ?? 'No key'}</Text></View><View style={[styles.songStatus, song.status === 'Ready' && styles.readyStatus]}><Text style={[styles.songStatusText, song.status === 'Ready' && styles.readyStatusText]}>{song.status}</Text></View><TouchableOpacity onPress={() => toggleSong(song)} style={styles.songPlayButton} accessibilityLabel={`Play ${song.title}`}><Ionicons name={activeSong === song.title && isSongPlaying ? 'pause' : 'play'} size={16} color={COLORS.ink} /></TouchableOpacity></View>)}</>}</View>;
+          <Text style={styles.listLabel}>{new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' }).toUpperCase()}</Text>
+          {rehearsals.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="calendar-outline" size={24} color={COLORS.muted} />
+              <Text style={styles.emptyStateTitle}>No rehearsals yet</Text>
+              <Text style={styles.emptyStateText}>Create the first rehearsal from the admin panel.</Text>
+            </View>
+          ) : rehearsals.map((item) => {
+            const currentStatus = attendanceChoice[item.id];
+            const schedule = formatRehearsalDate(item.startsAt);
+            const endTime = new Date(item.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const yesCount = item.attendances?.filter((entry) => entry.status === 'YES').length ?? 0;
+            return (
+              <View key={item.id} style={[styles.rehearsalListItem, selectedRehearsal === item.id && styles.rehearsalListSelected]}>
+                <TouchableOpacity style={styles.rehearsalMainTouch} onPress={() => setSelectedRehearsal(item.id)}>
+                  <View style={[styles.dateBlock, { backgroundColor: item.color }]}>
+                    <Text style={styles.dateDay}>{schedule.day}</Text>
+                    <Text style={styles.dateNumber}>{schedule.dateNumber}</Text>
+                    <Text style={styles.dateMonth}>{schedule.month}</Text>
+                  </View>
+                  <View style={styles.listMain}>
+                    <Text style={styles.listTitle}>{item.title}</Text>
+                    <Text style={styles.listMeta}>{schedule.start} - {endTime} · {item.location}</Text>
+                    <Text style={styles.listAttendance}>{yesCount} attending</Text>
+                  </View>
+                  <Ionicons name={selectedRehearsal === item.id ? 'checkmark-circle' : 'chevron-forward'} size={20} color={selectedRehearsal === item.id ? COLORS.olive : COLORS.muted} />
+                </TouchableOpacity>
+                <View style={styles.attendanceRow}>
+                  {(['YES', 'MAYBE', 'NO'] as const).map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[styles.attendancePill, currentStatus === status && styles.attendancePillActive]}
+                      onPress={async () => {
+                        setAttendanceChoice((current) => ({ ...current, [item.id]: status }));
+                        try {
+                          await updateAttendance('elayone-main-choir', item.id, status);
+                        } catch (error) {
+                          Alert.alert('Response not saved', error instanceof Error ? error.message : 'Please try again.');
+                        }
+                      }}
+                    >
+                      <Text style={[styles.attendancePillText, currentStatus === status && styles.attendancePillTextActive]}>
+                        {status === 'YES' ? 'I will' : status === 'MAYBE' ? 'Maybe' : 'No'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            );
+          })}
+        </>
+      )}
+
+      {tab === 'People' && (
+        <>
+          <View style={styles.peopleSummary}>
+            <Text style={styles.peopleNumber}>24</Text>
+            <View>
+              <Text style={styles.peopleTitle}>Active singers</Text>
+              <Text style={styles.peopleCaption}>4 section leaders · 3 vocal sections</Text>
+            </View>
+          </View>
+          {people.map((person) => (
+            <View key={person.name} style={styles.personRow}>
+              <View style={[styles.personAvatar, { backgroundColor: person.tone }]}>
+                <Text style={styles.personInitials}>{person.initials}</Text>
+              </View>
+              <View style={styles.personInfo}>
+                <Text style={styles.personName}>{person.name}</Text>
+                <Text style={styles.personRole}>{person.role}</Text>
+              </View>
+              <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.muted} />
+            </View>
+          ))}
+        </>
+      )}
+
+      {tab === 'Songs' && (
+        <>
+          <View style={styles.songSearchWrap}>
+            <Ionicons name="search-outline" size={18} color={COLORS.muted} />
+            <TextInput value={songQuery} onChangeText={setSongQuery} placeholder="Search songs, key, or status" placeholderTextColor={COLORS.muted} style={styles.songSearchInput} />
+          </View>
+          {featuredSong && (
+            <View style={styles.songFeatured}>
+              <View style={styles.songIconLarge}>
+                <Ionicons name="musical-notes" size={25} color={COLORS.white} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.songFeatureLabel}>CURRENTLY LEARNING</Text>
+                <Text style={styles.songFeatureTitle}>{featuredSong.title}</Text>
+                <Text style={styles.songFeatureMeta}>{featuredSong.key ?? 'Key not set'} · {featuredSong.status}</Text>
+              </View>
+              <TouchableOpacity onPress={() => toggleSong(featuredSong)} accessibilityLabel="Play featured song">
+                <Ionicons name={activeSong === featuredSong.title && isSongPlaying ? 'pause-circle-outline' : 'play-circle-outline'} size={29} color={COLORS.white} />
+              </TouchableOpacity>
+            </View>
+          )}
+          {filteredSongs.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="musical-notes-outline" size={24} color={COLORS.muted} />
+              <Text style={styles.emptyStateTitle}>No songs found</Text>
+              <Text style={styles.emptyStateText}>Try a different title, key, or status.</Text>
+            </View>
+          ) : filteredSongs.map((song) => (
+            <View key={song.title + (song.id ?? '')} style={styles.songRow}>
+              <View style={styles.songRowMain}>
+                <View style={styles.songIcon}>
+                  <Ionicons name={song.icon ?? 'musical-notes-outline'} size={18} color={COLORS.ink} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.songTitle}>{song.title}</Text>
+                  <Text style={styles.songMeta}>{song.key ?? 'No key'} · {song.status}</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => toggleSong(song)} accessibilityLabel={`Play ${song.title}`}>
+                <Ionicons name={activeSong === song.title && isSongPlaying ? 'pause-circle-outline' : 'play-circle-outline'} size={26} color={COLORS.ink} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+    </View>
+  );
 }
 
 const COLORS = { ink: '#171717', muted: '#797975', line: '#e5e3de', paper: '#f7f7f5', white: '#ffffff', olive: '#708067', clay: '#a76e5b' };

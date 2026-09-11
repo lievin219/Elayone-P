@@ -154,8 +154,21 @@ export async function createSong(choirId: string, data: { title: string; key?: s
 
 export type AttendanceSummary = { total: number; confirmed: number; rate: number; upcoming: number };
 
+export type RehearsalRecord = {
+  id: string;
+  title: string;
+  location: string;
+  startsAt: string;
+  endsAt: string;
+  attendances?: Array<{ id: string; status: 'YES' | 'MAYBE' | 'NO' | 'PENDING'; userId: string }>;
+};
+
 export async function getAttendanceSummary(choirId: string): Promise<AttendanceSummary> {
   return request<AttendanceSummary>(`/api/choirs/${choirId}/attendance/summary`, { headers: await authHeaders() });
+}
+
+export async function getRehearsals(choirId: string): Promise<RehearsalRecord[]> {
+  return request<RehearsalRecord[]>(`/api/choirs/${choirId}/rehearsals`, { headers: await authHeaders() });
 }
 
 export async function removeChoirMember(choirId: string, userId: string) {
