@@ -74,6 +74,15 @@ router.post('/:choirId/announcements', requireAdmin, async (request: AuthRequest
   return response.status(201).json(announcement);
 });
 
+router.delete('/:choirId/announcements/:announcementId', requireAdmin, async (request, response) => {
+  await prisma.announcement.delete({
+    where: {
+      id: String(request.params.announcementId),
+    },
+  });
+  return response.status(204).send();
+});
+
 router.get('/:choirId/songs', async (request, response) => {
   return response.json(await prisma.song.findMany({ where: { choirId: request.params.choirId }, orderBy: { title: 'asc' } }));
 });

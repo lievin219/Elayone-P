@@ -68,6 +68,8 @@ export type Session = {
   user: User;
 };
 
+export type Role = 'MEMBER' | 'LEADER' | 'ADMIN';
+
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 const SESSION_KEY = process.env.SESSION_KEY ?? 'elayone-session';
 
@@ -160,12 +162,20 @@ export async function removeChoirMember(choirId: string, userId: string) {
   return request<void>(`/api/choirs/${choirId}/people/${userId}`, { method: 'DELETE', headers: await authHeaders() });
 }
 
+export async function updateUserRole(userId: string, role: Role) {
+  return request<User>(`/api/users/${userId}/role`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ role }) });
+}
+
 export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string }) {
   return request(`/api/choirs/${choirId}/rehearsals`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }
 
 export async function publishAnnouncement(choirId: string, data: { title: string; message: string; priority: 'NORMAL' | 'IMPORTANT' }) {
   return request(`/api/choirs/${choirId}/announcements`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
+}
+
+export async function deleteAnnouncement(choirId: string, announcementId: string) {
+  return request<void>(`/api/choirs/${choirId}/announcements/${announcementId}`, { method: 'DELETE', headers: await authHeaders() });
 }
 
 export type DirectoryUser = User & {

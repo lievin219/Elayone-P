@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
+import { AuthRequest, requireAdmin } from '../middleware/auth';
 
 const router = Router();
 
@@ -16,6 +17,21 @@ router.get('/', async (_request, response) => {
     orderBy: { createdAt: 'desc' },
   });
   return response.json(users);
+});
+
+router.patch('/:userId/role', requireAdmin, async (request: AuthRequest, response) => {
+  const { role } = request.body ?? {};
+  if (!role || !['MEMBER', 'LEADER', 'ADMIN'].includes(role)) {
+    return response.status(400).json({ message: 'A valid role is required: MEMBER, LEADER, or ADMIN.' });
+  }
+
+  const user = await prisma.user.update({
+    where: { id: String(request.params.userId) },
+    data: { role },
+    select: { id: true, name: true, email: true, role: true, createdAt: true, memberships: { select: { choirId: true, vocalPart: true, availability: true } } },
+  });
+
+  return response.json(user);
 });
 
 export default router;

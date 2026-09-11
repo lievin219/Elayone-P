@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { AttendanceSummary, createRehearsal, createSong, DirectoryUser, getAllUsers, getAttendanceSummary, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp } from './src/api';
+import { AttendanceSummary, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, getAllUsers, getAttendanceSummary, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, Session, signIn, signOut, signUp, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Admin';
@@ -273,7 +273,11 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Admin' ? <AdminPanel onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [{ ...nextAnnouncement, authorName: nextAnnouncement.authorName ?? session?.user.name ?? 'Admin' }, ...current]); setHasNewAnnouncements(true); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} /> : (
+          ) : activeTab === 'Admin' ? <AdminPanel announcements={announcements} onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [{ ...nextAnnouncement, authorName: nextAnnouncement.authorName ?? session?.user.name ?? 'Admin' }, ...current]); setHasNewAnnouncements(true); }} onAnnouncementDeleted={(id) => { setAnnouncements((current) => {
+            const next = current.filter((announcement) => announcement.id !== id);
+            setHasNewAnnouncements(next.length > 0);
+            return next;
+          }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} /> : (
             <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
@@ -289,7 +293,7 @@ export default function App() {
   );
 }
 
-function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPublished: (announcement: AnnouncementItem) => void; onSongAdded: (song: SongItem) => void }) {
+function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, onSongAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; onSongAdded: (song: SongItem) => void }) {
   const [eventTitle, setEventTitle] = useState('');
   const [eventLocation, setEventLocation] = useState('');
   const [newsTitle, setNewsTitle] = useState('');
@@ -392,6 +396,26 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
     }
   }
 
+  async function changeRole(userId: string, nextRole: 'MEMBER' | 'LEADER' | 'ADMIN') {
+    try {
+      const updated = await updateUserRole(userId, nextRole);
+      setUsers((current) => current.map((user) => user.id === userId ? { ...user, role: updated.role } : user));
+      setNotice({ type: 'success', text: `${updated.name} is now a ${updated.role}.` });
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not update this role right now.' });
+    }
+  }
+
+  async function removeMember(userId: string) {
+    try {
+      await removeChoirMember(choirId, userId);
+      setUsers((current) => current.filter((user) => user.id !== userId));
+      setNotice({ type: 'success', text: 'Member removed from this choir.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not remove this member.' });
+    }
+  }
+
   return (
     <View>
       <Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text>
@@ -432,6 +456,45 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
               <Text style={styles.personRole}>{user.email}</Text>
               <Text style={styles.directoryMeta}>{user.role} · {user.memberships.length} choir membership{user.memberships.length === 1 ? '' : 's'}</Text>
             </View>
+            <View style={styles.roleActions}>
+              {user.role !== 'ADMIN' && (
+                <TouchableOpacity style={styles.smallActionButton} onPress={() => changeRole(user.id, 'ADMIN')}>
+                  <Text style={styles.smallActionText}>Make admin</Text>
+                </TouchableOpacity>
+              )}
+              {user.role !== 'MEMBER' && (
+                <TouchableOpacity style={styles.smallSecondaryActionButton} onPress={() => changeRole(user.id, 'MEMBER')}>
+                  <Text style={styles.smallSecondaryActionText}>Member</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.removeIconButton} onPress={() => removeMember(user.id)} accessibilityLabel={`Remove ${user.name}`}>
+                <Ionicons name="person-remove-outline" size={17} color={COLORS.clay} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </AdminForm>
+
+      <AdminForm title="Recent announcements" icon="megaphone-outline">
+        {announcements.length === 0 ? (
+          <Text style={styles.adminHelp}>No announcements to manage yet.</Text>
+        ) : announcements.map((item) => (
+          <View key={item.id} style={styles.adminAnnouncementRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.adminAnnouncementTitle}>{item.title}</Text>
+              <Text style={styles.adminAnnouncementMeta}>{item.authorName ?? 'Elayone team'} · {new Date(item.createdAt).toLocaleDateString()}</Text>
+            </View>
+            <TouchableOpacity style={styles.removeIconButton} onPress={async () => {
+              try {
+                await deleteAnnouncement(choirId, item.id);
+                onAnnouncementDeleted(item.id);
+                setNotice({ type: 'success', text: 'Announcement deleted.' });
+              } catch (error) {
+                setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not delete this announcement.' });
+              }
+            }} accessibilityLabel={`Delete ${item.title}`}>
+              <Ionicons name="trash-outline" size={17} color={COLORS.clay} />
+            </TouchableOpacity>
           </View>
         ))}
       </AdminForm>
@@ -668,6 +731,14 @@ const styles = StyleSheet.create({
   adminFormIcon: { width: 32, height: 32, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   adminFormTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18 },
   directoryHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  roleActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, flexWrap: 'wrap', justifyContent: 'flex-end' },
+  smallActionButton: { backgroundColor: '#edf2ec', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6 },
+  smallActionText: { color: COLORS.ink, fontSize: 9, fontWeight: '800' },
+  smallSecondaryActionButton: { backgroundColor: '#f5f1ee', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6 },
+  smallSecondaryActionText: { color: COLORS.muted, fontSize: 9, fontWeight: '800' },
+  adminAnnouncementRow: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  adminAnnouncementTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
+  adminAnnouncementMeta: { color: COLORS.muted, fontSize: 10, marginTop: 4 },
   directoryCount: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 27, marginRight: 6 },
   directoryLabel: { color: COLORS.muted, fontSize: 11, flex: 1 },
   directoryRow: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 11, flexDirection: 'row', alignItems: 'center' },
