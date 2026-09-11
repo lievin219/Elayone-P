@@ -120,8 +120,17 @@ export async function updateAttendance(choirId: string, rehearsalId: string, sta
   return request(`/api/choirs/${choirId}/rehearsals/${rehearsalId}/attendance`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ status }) });
 }
 
+export type AnnouncementRecord = {
+  id: string;
+  title: string;
+  message: string;
+  priority: 'NORMAL' | 'IMPORTANT';
+  createdAt: string;
+  author?: { name: string } | null;
+};
+
 export async function getAnnouncements(choirId: string) {
-  return request<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>(`/api/choirs/${choirId}/announcements`, { headers: await authHeaders() });
+  return request<AnnouncementRecord[]>(`/api/choirs/${choirId}/announcements`, { headers: await authHeaders() });
 }
 
 export type SongRecord = {

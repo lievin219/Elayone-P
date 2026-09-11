@@ -42,6 +42,7 @@ model User {
   memberships  Membership[]
   attendances  Attendance[]
   assignments  Assignment[]
+  announcements Announcement[] @relation("AnnouncementAuthor")
 }
 
 model Choir {
@@ -101,6 +102,8 @@ model Announcement {
   message     String
   priority    AnnouncementPriority @default(NORMAL)
   createdAt   DateTime             @default(now())
+  authorId    String?
+  author      User?                @relation("AnnouncementAuthor", fields: [authorId], references: [id])
   choir       Choir                @relation(fields: [choirId], references: [id], onDelete: Cascade)
   rehearsal   Rehearsal?           @relation(fields: [rehearsalId], references: [id])
   rehearsalId String?

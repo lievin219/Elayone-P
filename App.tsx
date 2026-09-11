@@ -52,6 +52,16 @@ const attendanceRoster = [
   { name: 'Eric Ishimwe', part: 'Tenor', status: 'Away', tone: '#b3bdc9' },
 ];
 
+type AnnouncementItem = {
+  id: string;
+  title: string;
+  message: string;
+  priority: 'NORMAL' | 'IMPORTANT';
+  createdAt: string;
+  author?: { name: string } | null;
+  authorName?: string;
+};
+
 type SongItem = {
   id?: string;
   title: string;
@@ -77,7 +87,7 @@ export default function App() {
   const [checkedIn, setCheckedIn] = useState(false);
   const [visiblePeople, setVisiblePeople] = useState(people);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
-  const [announcements, setAnnouncements] = useState<Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
   const [songs, setSongs] = useState<SongItem[]>(seedSongs);
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -147,6 +157,12 @@ export default function App() {
     getStoredSession().then(setSession).finally(() => setAuthReady(true));
   }, []);
 
+  function handleAuthenticated(nextSession: Session) {
+    setSession(nextSession);
+    setActiveTab('Home');
+    setShowNotifications(false);
+  }
+
   React.useEffect(() => {
     if (!session) {
       setAnnouncements([]);
@@ -161,8 +177,12 @@ export default function App() {
       getSongs('elayone-main-choir')
     ]))
       .then(([nextAnnouncements, nextSongs]) => {
-        setAnnouncements(nextAnnouncements);
-        setHasNewAnnouncements(nextAnnouncements.length > 0);
+        const normalizedAnnouncements: AnnouncementItem[] = nextAnnouncements.map((item) => ({
+          ...item,
+          authorName: item.author?.name ?? 'Elayone team',
+        }));
+        setAnnouncements(normalizedAnnouncements);
+        setHasNewAnnouncements(normalizedAnnouncements.length > 0);
         setSongs(nextSongs.length > 0 ? nextSongs.map((song) => ({ ...song, icon: song.status === 'LEARN' ? 'book-outline' : 'musical-notes-outline' })) : seedSongs);
       })
       .catch(() => {
@@ -177,7 +197,7 @@ export default function App() {
   }
 
   if (!authReady) return <View style={styles.loadingScreen}><ActivityIndicator color={COLORS.ink} /></View>;
-  if (!session) return <AuthScreen onAuthenticated={setSession} />;
+  if (!session) return <AuthScreen onAuthenticated={handleAuthenticated} />;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -253,7 +273,7 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Admin' ? <AdminPanel onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [nextAnnouncement, ...current]); setHasNewAnnouncements(true); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} /> : (
+          ) : activeTab === 'Admin' ? <AdminPanel onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [{ ...nextAnnouncement, authorName: nextAnnouncement.authorName ?? session?.user.name ?? 'Admin' }, ...current]); setHasNewAnnouncements(true); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} /> : (
             <TabView tab={activeTab} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
@@ -269,7 +289,7 @@ export default function App() {
   );
 }
 
-function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPublished: (announcement: { id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }) => void; onSongAdded: (song: SongItem) => void }) {
+function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPublished: (announcement: AnnouncementItem) => void; onSongAdded: (song: SongItem) => void }) {
   const [eventTitle, setEventTitle] = useState('');
   const [eventLocation, setEventLocation] = useState('');
   const [newsTitle, setNewsTitle] = useState('');
@@ -306,6 +326,7 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
         message: newsMessage,
         priority,
         createdAt: new Date().toISOString(),
+        authorName: 'You',
       });
       setNewsTitle('');
       setNewsMessage('');
@@ -358,8 +379,8 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
   return <View><Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text><Text style={styles.pageTitle}>Lead the ministry</Text><Text style={styles.pageCaption}>Keep the choir informed, prepared, and cared for.</Text><View style={styles.adminNotice}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.olive} /><View style={{ flex: 1 }}><Text style={styles.adminNoticeTitle}>Leader access</Text><Text style={styles.adminNoticeText}>Your changes are shared with the whole choir.</Text></View></View><AdminForm title="All registered users" icon="people-circle-outline"><View style={styles.directoryHeader}><Text style={styles.directoryCount}>{users.length}</Text><Text style={styles.directoryLabel}>accounts</Text><TouchableOpacity onPress={() => { setUsersLoading(true); getAllUsers().then(setUsers).finally(() => setUsersLoading(false)); }}><Ionicons name="refresh-outline" size={19} color={COLORS.ink} /></TouchableOpacity></View>{usersLoading ? <ActivityIndicator color={COLORS.ink} /> : users.length === 0 ? <Text style={styles.adminHelp}>No registered users yet.</Text> : users.map((user) => <View key={user.id} style={styles.directoryRow}><View style={styles.directoryAvatar}><Text style={styles.directoryInitial}>{user.name.slice(0, 1).toUpperCase()}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{user.name}</Text><Text style={styles.personRole}>{user.email}</Text><Text style={styles.directoryMeta}>{user.role} · {user.memberships.length} choir membership{user.memberships.length === 1 ? '' : 's'}</Text></View></View>)}</AdminForm><AdminForm title="Add a song" icon="musical-notes-outline"><Field label="SONG TITLE" value={songTitle} onChangeText={setSongTitle} placeholder="I will praise you" /><Field label="KEY" value={songKey} onChangeText={setSongKey} placeholder="Key of G" /><Field label="PREVIEW URL" value={songPreviewUrl} onChangeText={setSongPreviewUrl} placeholder="https://example.com/song.mp3" /><Field label="NOTES" value={songNotes} onChangeText={setSongNotes} placeholder="Verse starter / arrangement notes" /><View style={styles.inlineFieldRow}><TouchableOpacity style={[styles.segmentedButton, songStatus === 'READY' && styles.segmentedButtonActive]} onPress={() => setSongStatus('READY')}><Text style={[styles.segmentedButtonText, songStatus === 'READY' && styles.segmentedButtonTextActive]}>READY</Text></TouchableOpacity><TouchableOpacity style={[styles.segmentedButton, songStatus === 'LEARN' && styles.segmentedButtonActive]} onPress={() => setSongStatus('LEARN')}><Text style={[styles.segmentedButtonText, songStatus === 'LEARN' && styles.segmentedButtonTextActive]}>LEARN</Text></TouchableOpacity></View><TouchableOpacity style={styles.adminButton} onPress={addSong} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add song</Text></TouchableOpacity></AdminForm><AdminForm title="Add an event" icon="calendar-outline"><Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Full choir rehearsal" /><Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" /><TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add event</Text></TouchableOpacity></AdminForm><AdminForm title="Publish news" icon="megaphone-outline"><Field label="HEADLINE" value={newsTitle} onChangeText={setNewsTitle} placeholder="A note for the choir" /><Field label="MESSAGE" value={newsMessage} onChangeText={setNewsMessage} placeholder="Write your announcement" multiline /><TouchableOpacity style={styles.adminButton} onPress={publishNews} disabled={busy}><Ionicons name="paper-plane-outline" size={16} color={COLORS.white} /><Text style={styles.adminButtonText}>Publish news</Text></TouchableOpacity></AdminForm><AdminForm title="Member management" icon="people-outline"><Text style={styles.adminHelp}>Remove singers who are no longer part of Elayone Choir. This action cannot be undone.</Text><TouchableOpacity style={styles.removeButton} onPress={removeMember}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /><Text style={styles.removeButtonText}>Manage members</Text></TouchableOpacity></AdminForm></View>;
 }
 
-function NotificationsPanel({ announcements, onClose }: { announcements: Array<{ id: string; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string }>; onClose: () => void }) {
-  return <View style={styles.notificationsPanel}><View style={styles.notificationsHeader}><View><Text style={styles.pageEyebrow}>ELAYONE / ALERTS</Text><Text style={styles.pageTitle}>Notifications</Text></View><TouchableOpacity onPress={onClose} style={styles.closeButton}><Ionicons name="close" size={18} color={COLORS.ink} /></TouchableOpacity></View>{announcements.length === 0 ? <View style={styles.emptyState}><Ionicons name="notifications-off-outline" size={24} color={COLORS.muted} /><Text style={styles.emptyStateTitle}>No announcements yet</Text><Text style={styles.emptyStateText}>Your choir updates will show up here when they are published.</Text></View> : announcements.map((item) => <View key={item.id} style={styles.notificationCard}><View style={styles.notificationTop}><Text style={styles.notificationLabel}>{item.priority === 'IMPORTANT' ? 'IMPORTANT' : 'UPDATE'}</Text><Text style={styles.notificationTime}>{new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></View><Text style={styles.notificationTitle}>{item.title}</Text><Text style={styles.notificationMessage}>{item.message}</Text></View>)}</View>;
+function NotificationsPanel({ announcements, onClose }: { announcements: AnnouncementItem[]; onClose: () => void }) {
+  return <View style={styles.notificationsPanel}><View style={styles.notificationsHeader}><View><Text style={styles.pageEyebrow}>ELAYONE / ALERTS</Text><Text style={styles.pageTitle}>Notifications</Text></View><TouchableOpacity onPress={onClose} style={styles.closeButton}><Ionicons name="close" size={18} color={COLORS.ink} /></TouchableOpacity></View>{announcements.length === 0 ? <View style={styles.emptyState}><Ionicons name="notifications-off-outline" size={24} color={COLORS.muted} /><Text style={styles.emptyStateTitle}>No announcements yet</Text><Text style={styles.emptyStateText}>Your choir updates will show up here when they are published.</Text></View> : announcements.map((item) => <View key={item.id} style={styles.notificationCard}><View style={styles.notificationTop}><Text style={styles.notificationLabel}>{item.priority === 'IMPORTANT' ? 'IMPORTANT' : 'UPDATE'}</Text><Text style={styles.notificationTime}>{new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></View><Text style={styles.notificationTitle}>{item.title}</Text><View style={styles.notificationMeta}><Ionicons name="person-circle-outline" size={14} color={COLORS.muted} /><Text style={styles.notificationAuthor}>{item.authorName ?? item.author?.name ?? 'Elayone team'}</Text></View><Text style={styles.notificationMessage}>{item.message}</Text></View>)}</View>;
 }
 
 function AdminForm({ title, icon, children }: { title: string; icon: IconName; children: React.ReactNode }) {
@@ -632,6 +653,8 @@ const styles = StyleSheet.create({
   notificationTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   notificationLabel: { color: COLORS.olive, fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   notificationTime: { color: COLORS.muted, fontSize: 10 },
+  notificationMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
+  notificationAuthor: { color: COLORS.muted, fontSize: 11, fontWeight: '700' },
   notificationTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18, marginBottom: 6 },
   notificationMessage: { color: COLORS.muted, fontSize: 12, lineHeight: 19 },
   nextRehearsalCard: { backgroundColor: COLORS.white, borderRadius: 5, padding: 20, borderWidth: 1, borderColor: '#eeece7', marginBottom: 29 }, cardTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.25 }, livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ec', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginRight: 5 }, liveText: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, rehearsalTitle: { fontFamily: 'Georgia', fontSize: 24, color: COLORS.ink, marginTop: 19 }, detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 }, detailText: { color: COLORS.muted, fontSize: 12, marginLeft: 5 }, detailIcon: { marginLeft: 14 }, cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, marginTop: 19, paddingTop: 15 }, avatarStack: { flexDirection: 'row', width: 62 }, avatar: { width: 25, height: 25, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.white, justifyContent: 'center', alignItems: 'center' }, avatarText: { fontSize: 9, fontWeight: '800', color: COLORS.ink }, attendanceText: { color: COLORS.muted, fontSize: 11, flex: 1 }, checkInButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ink, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 3, gap: 7 }, checkInText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },

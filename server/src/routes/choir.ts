@@ -51,13 +51,26 @@ router.post('/:choirId/rehearsals/:rehearsalId/attendance', async (request: Auth
 });
 
 router.get('/:choirId/announcements', async (request, response) => {
-  return response.json(await prisma.announcement.findMany({ where: { choirId: String(request.params.choirId) }, orderBy: { createdAt: 'desc' } }));
+  return response.json(await prisma.announcement.findMany({
+    where: { choirId: String(request.params.choirId) },
+    include: { author: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' },
+  }));
 });
 
-router.post('/:choirId/announcements', requireAdmin, async (request, response) => {
+router.post('/:choirId/announcements', requireAdmin, async (request: AuthRequest, response) => {
   const { title, message, priority } = request.body;
   if (!title || !message) return response.status(400).json({ message: 'Title and message are required.' });
-  const announcement = await prisma.announcement.create({ data: { choirId: String(request.params.choirId), title, message, priority: priority === 'IMPORTANT' ? 'IMPORTANT' : 'NORMAL' } });
+  const announcement = await prisma.announcement.create({
+    data: {
+      choirId: String(request.params.choirId),
+      title,
+      message,
+      priority: priority === 'IMPORTANT' ? 'IMPORTANT' : 'NORMAL',
+      authorId: request.userId,
+    },
+    include: { author: { select: { name: true } } },
+  });
   return response.status(201).json(announcement);
 });
 
