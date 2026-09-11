@@ -14,6 +14,16 @@ npm run dev
 
 The API runs on `http://localhost:4000`. Set `EXPO_PUBLIC_API_URL` for the mobile client. For a physical phone, use your computer's LAN IP instead of `localhost`.
 
+## Access control
+
+The platform controls who can view and use files and information based on role and responsibility.
+
+- Team leader → controls access
+- Musician → accesses relevant rehearsal material
+- Other volunteer → sees information relevant to their assignment
+
+The file-storage system is managed by team leaders, who control access and visibility for each user or role.
+
 Routes:
 
 - `POST /api/auth/signup`

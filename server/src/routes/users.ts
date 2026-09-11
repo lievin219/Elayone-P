@@ -34,8 +34,11 @@ router.patch('/:userId/role', requireAdmin, async (request: AuthRequest, respons
     return response.status(404).json({ message: 'User not found.' });
   }
 
-  if (targetUser.role === 'ADMIN' && role !== 'ADMIN') {
-    return response.status(403).json({ message: 'Admin accounts are protected and cannot be changed to a normal role.' });
+  const protectedAdminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const isProtectedAdmin = protectedAdminEmail && targetUser.email.toLowerCase() === protectedAdminEmail;
+
+  if (isProtectedAdmin && role !== 'ADMIN') {
+    return response.status(403).json({ message: 'The configured admin account is protected and cannot be changed to a normal role.' });
   }
 
   const user = await prisma.user.update({
