@@ -301,6 +301,7 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
   const [songNotes, setSongNotes] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'IMPORTANT'>('NORMAL');
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const choirId = 'elayone-main-choir';
@@ -312,18 +313,35 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
   async function addEvent() {
     if (!eventTitle || !eventLocation) return Alert.alert('Missing details', 'Add an event title and location.');
     setBusy(true);
-    try { await createRehearsal(choirId, { title: eventTitle, location: eventLocation, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() }); setEventTitle(''); setEventLocation(''); Alert.alert('Event added', 'The choir can now see this rehearsal.'); } catch (error) { Alert.alert('Could not add event', error instanceof Error ? error.message : 'Try again.'); } finally { setBusy(false); }
+    try {
+      await createRehearsal(choirId, { title: eventTitle, location: eventLocation, startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() });
+      setEventTitle('');
+      setEventLocation('');
+      setNotice({ type: 'success', text: 'Rehearsal added successfully and is now visible to the choir.' });
+      Alert.alert('Event added', 'The choir can now see this rehearsal.');
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Unable to add the rehearsal right now.' });
+      Alert.alert('Could not add event', error instanceof Error ? error.message : 'Try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function publishNews() {
-    if (!newsTitle || !newsMessage) return Alert.alert('Missing details', 'Add a headline and message.');
+    if (!newsTitle.trim() || !newsMessage.trim()) {
+      setNotice({ type: 'error', text: 'Please add both a title and a message before sending the announcement.' });
+      return;
+    }
+
     setBusy(true);
+    setNotice(null);
+
     try {
-      await publishAnnouncement(choirId, { title: newsTitle, message: newsMessage, priority });
+      await publishAnnouncement(choirId, { title: newsTitle.trim(), message: newsMessage.trim(), priority });
       onAnnouncementPublished({
         id: `${Date.now()}`,
-        title: newsTitle,
-        message: newsMessage,
+        title: newsTitle.trim(),
+        message: newsMessage.trim(),
         priority,
         createdAt: new Date().toISOString(),
         authorName: 'You',
@@ -331,9 +349,9 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
       setNewsTitle('');
       setNewsMessage('');
       setPriority('NORMAL');
-      Alert.alert('News published', 'Your announcement is now available to the choir.');
+      setNotice({ type: 'success', text: 'Announcement sent successfully. The choir can now see it.' });
     } catch (error) {
-      Alert.alert('Could not publish', error instanceof Error ? error.message : 'Try again.');
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Unable to send the announcement right now.' });
     } finally {
       setBusy(false);
     }
@@ -364,19 +382,92 @@ function AdminPanel({ onAnnouncementPublished, onSongAdded }: { onAnnouncementPu
       setSongPreviewUrl('');
       setSongStatus('READY');
       setSongNotes('');
+      setNotice({ type: 'success', text: 'Song saved successfully and added to the library.' });
       Alert.alert('Song added', 'The song is now available in the library.');
     } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not save the song right now.' });
       Alert.alert('Could not save song', error instanceof Error ? error.message : 'Try again.');
     } finally {
       setBusy(false);
     }
   }
 
-  function removeMember() {
-    Alert.alert('Remove a member', 'Choose a member from the People screen to remove them from the choir.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Go to People', onPress: () => undefined }]);
-  }
+  return (
+    <View>
+      <Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text>
+      <Text style={styles.pageTitle}>Lead the ministry</Text>
+      <Text style={styles.pageCaption}>Keep the choir informed, prepared, and cared for.</Text>
 
-  return <View><Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text><Text style={styles.pageTitle}>Lead the ministry</Text><Text style={styles.pageCaption}>Keep the choir informed, prepared, and cared for.</Text><View style={styles.adminNotice}><Ionicons name="shield-checkmark-outline" size={20} color={COLORS.olive} /><View style={{ flex: 1 }}><Text style={styles.adminNoticeTitle}>Leader access</Text><Text style={styles.adminNoticeText}>Your changes are shared with the whole choir.</Text></View></View><AdminForm title="All registered users" icon="people-circle-outline"><View style={styles.directoryHeader}><Text style={styles.directoryCount}>{users.length}</Text><Text style={styles.directoryLabel}>accounts</Text><TouchableOpacity onPress={() => { setUsersLoading(true); getAllUsers().then(setUsers).finally(() => setUsersLoading(false)); }}><Ionicons name="refresh-outline" size={19} color={COLORS.ink} /></TouchableOpacity></View>{usersLoading ? <ActivityIndicator color={COLORS.ink} /> : users.length === 0 ? <Text style={styles.adminHelp}>No registered users yet.</Text> : users.map((user) => <View key={user.id} style={styles.directoryRow}><View style={styles.directoryAvatar}><Text style={styles.directoryInitial}>{user.name.slice(0, 1).toUpperCase()}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{user.name}</Text><Text style={styles.personRole}>{user.email}</Text><Text style={styles.directoryMeta}>{user.role} · {user.memberships.length} choir membership{user.memberships.length === 1 ? '' : 's'}</Text></View></View>)}</AdminForm><AdminForm title="Add a song" icon="musical-notes-outline"><Field label="SONG TITLE" value={songTitle} onChangeText={setSongTitle} placeholder="I will praise you" /><Field label="KEY" value={songKey} onChangeText={setSongKey} placeholder="Key of G" /><Field label="PREVIEW URL" value={songPreviewUrl} onChangeText={setSongPreviewUrl} placeholder="https://example.com/song.mp3" /><Field label="NOTES" value={songNotes} onChangeText={setSongNotes} placeholder="Verse starter / arrangement notes" /><View style={styles.inlineFieldRow}><TouchableOpacity style={[styles.segmentedButton, songStatus === 'READY' && styles.segmentedButtonActive]} onPress={() => setSongStatus('READY')}><Text style={[styles.segmentedButtonText, songStatus === 'READY' && styles.segmentedButtonTextActive]}>READY</Text></TouchableOpacity><TouchableOpacity style={[styles.segmentedButton, songStatus === 'LEARN' && styles.segmentedButtonActive]} onPress={() => setSongStatus('LEARN')}><Text style={[styles.segmentedButtonText, songStatus === 'LEARN' && styles.segmentedButtonTextActive]}>LEARN</Text></TouchableOpacity></View><TouchableOpacity style={styles.adminButton} onPress={addSong} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add song</Text></TouchableOpacity></AdminForm><AdminForm title="Add an event" icon="calendar-outline"><Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Full choir rehearsal" /><Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" /><TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}><Ionicons name="add" size={17} color={COLORS.white} /><Text style={styles.adminButtonText}>Add event</Text></TouchableOpacity></AdminForm><AdminForm title="Publish news" icon="megaphone-outline"><Field label="HEADLINE" value={newsTitle} onChangeText={setNewsTitle} placeholder="A note for the choir" /><Field label="MESSAGE" value={newsMessage} onChangeText={setNewsMessage} placeholder="Write your announcement" multiline /><TouchableOpacity style={styles.adminButton} onPress={publishNews} disabled={busy}><Ionicons name="paper-plane-outline" size={16} color={COLORS.white} /><Text style={styles.adminButtonText}>Publish news</Text></TouchableOpacity></AdminForm><AdminForm title="Member management" icon="people-outline"><Text style={styles.adminHelp}>Remove singers who are no longer part of Elayone Choir. This action cannot be undone.</Text><TouchableOpacity style={styles.removeButton} onPress={removeMember}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /><Text style={styles.removeButtonText}>Manage members</Text></TouchableOpacity></AdminForm></View>;
+      <View style={styles.adminNotice}>
+        <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.olive} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.adminNoticeTitle}>Leader access</Text>
+          <Text style={styles.adminNoticeText}>Your changes are shared with the whole choir.</Text>
+        </View>
+      </View>
+
+      {notice ? (
+        <View style={[styles.noticeBanner, notice.type === 'success' ? styles.noticeSuccess : styles.noticeError]}>
+          <Text style={[styles.noticeText, notice.type === 'success' ? styles.noticeTextSuccess : styles.noticeTextError]}>{notice.text}</Text>
+        </View>
+      ) : null}
+
+      <AdminForm title="All registered users" icon="people-circle-outline">
+        <View style={styles.directoryHeader}>
+          <Text style={styles.directoryCount}>{users.length}</Text>
+          <Text style={styles.directoryLabel}>accounts</Text>
+          <TouchableOpacity onPress={() => { setUsersLoading(true); getAllUsers().then(setUsers).finally(() => setUsersLoading(false)); }}>
+            <Ionicons name="refresh-outline" size={19} color={COLORS.ink} />
+          </TouchableOpacity>
+        </View>
+        {usersLoading ? (
+          <ActivityIndicator color={COLORS.ink} />
+        ) : users.length === 0 ? (
+          <Text style={styles.adminHelp}>No registered users yet.</Text>
+        ) : users.map((user) => (
+          <View key={user.id} style={styles.directoryRow}>
+            <View style={styles.directoryAvatar}><Text style={styles.directoryInitial}>{user.name.slice(0, 1).toUpperCase()}</Text></View>
+            <View style={styles.personInfo}>
+              <Text style={styles.personName}>{user.name}</Text>
+              <Text style={styles.personRole}>{user.email}</Text>
+              <Text style={styles.directoryMeta}>{user.role} · {user.memberships.length} choir membership{user.memberships.length === 1 ? '' : 's'}</Text>
+            </View>
+          </View>
+        ))}
+      </AdminForm>
+
+      <AdminForm title="Add a song" icon="musical-notes-outline">
+        <Field label="SONG TITLE" value={songTitle} onChangeText={setSongTitle} placeholder="I will praise you" />
+        <Field label="KEY" value={songKey} onChangeText={setSongKey} placeholder="Key of G" />
+        <Field label="PREVIEW URL" value={songPreviewUrl} onChangeText={setSongPreviewUrl} placeholder="https://example.com/song.mp3" />
+        <Field label="NOTES" value={songNotes} onChangeText={setSongNotes} placeholder="Add singing notes or rehearsal tips" multiline />
+        <TouchableOpacity style={styles.adminButton} onPress={addSong} disabled={busy}>
+          <Text style={styles.adminButtonText}>{busy ? 'Saving...' : 'Add song'}</Text>
+        </TouchableOpacity>
+      </AdminForm>
+
+      <AdminForm title="Publish a choir update" icon="megaphone-outline">
+        <Field label="HEADLINE" value={newsTitle} onChangeText={setNewsTitle} placeholder="A note for the choir" />
+        <Field label="MESSAGE" value={newsMessage} onChangeText={setNewsMessage} placeholder="Write your announcement" multiline />
+        <View style={styles.priorityRow}>
+          {(['NORMAL', 'IMPORTANT'] as const).map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={[styles.priorityOption, priority === option && (option === 'IMPORTANT' ? styles.priorityOptionActiveImportant : styles.priorityOptionActive)]}
+              onPress={() => setPriority(option)}
+            >
+              <Text style={[styles.priorityText, priority === option && (option === 'IMPORTANT' ? styles.priorityTextActiveImportant : styles.priorityTextActive)]}>
+                {option}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <TouchableOpacity style={styles.adminButton} onPress={publishNews} disabled={busy}>
+          <Text style={styles.adminButtonText}>{busy ? 'Sending...' : 'Send announcement'}</Text>
+        </TouchableOpacity>
+      </AdminForm>
+    </View>
+  );
 }
 
 function NotificationsPanel({ announcements, onClose }: { announcements: AnnouncementItem[]; onClose: () => void }) {
@@ -566,6 +657,12 @@ const styles = StyleSheet.create({
   adminNotice: { backgroundColor: '#eef2ec', borderRadius: 4, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 17 },
   adminNoticeTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
   adminNoticeText: { color: COLORS.muted, fontSize: 10, marginTop: 3 },
+  noticeBanner: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14, borderWidth: 1 },
+  noticeSuccess: { backgroundColor: '#edf5ee', borderColor: '#bfd8c2' },
+  noticeError: { backgroundColor: '#fdf1ef', borderColor: '#e9c8c2' },
+  noticeText: { fontSize: 12, fontWeight: '700', lineHeight: 18 },
+  noticeTextSuccess: { color: '#1f4d2f' },
+  noticeTextError: { color: '#7c2f2f' },
   adminForm: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 15, marginBottom: 12 },
   adminFormHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   adminFormIcon: { width: 32, height: 32, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
