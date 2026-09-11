@@ -83,11 +83,14 @@ export default function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [nowPlaying, setNowPlaying] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const soundRef = useRef<Audio.Sound | null>(null);
 
   useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     Audio.setAudioModeAsync({ playsInSilentModeIOS: true, interruptionModeIOS: InterruptionModeIOS.DoNotMix, interruptionModeAndroid: InterruptionModeAndroid.DoNotMix, shouldDuckAndroid: true });
     return () => {
+      clearInterval(timer);
       if (soundRef.current) {
         soundRef.current.unloadAsync().catch(() => undefined);
       }
@@ -130,6 +133,15 @@ export default function App() {
 
   const showHome = activeTab === 'Home';
   const isAdmin = session?.user.role === 'ADMIN' || session?.user.role === 'LEADER';
+  const welcomeName = session?.user.name?.split(' ')[0] ?? 'Choir member';
+  const formattedDate = currentTime.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const formattedTime = currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const dailyVerse = [
+    '“Trust in the Lord with all your heart and lean not on your own understanding.” — Proverbs 3:5',
+    '“Let everything that has breath praise the Lord.” — Psalm 150:6',
+    '“I can do all things through Christ who strengthens me.” — Philippians 4:13',
+    '“The Lord is my strength and my song.” — Exodus 15:2',
+  ][currentTime.getDate() % 4];
 
   React.useEffect(() => {
     getStoredSession().then(setSession).finally(() => setAuthReady(true));
@@ -194,9 +206,9 @@ export default function App() {
           ) : showHome ? (
             <>
               <View style={styles.hero}>
-                <Text style={styles.eyebrow}>MONDAY, 18 AUGUST 2025</Text>
-                <Text style={styles.heroTitle}>Serve with{`\n`}one voice.</Text>
-                <Text style={styles.heroBody}>A clear heart. A prepared voice. Music for the mission.</Text>
+                <Text style={styles.eyebrow}>{formattedDate.toUpperCase()} • {formattedTime}</Text>
+                <Text style={styles.heroTitle}>Welcome, {welcomeName}.{`\n`}Serve with one voice.</Text>
+                <Text style={styles.heroBody}>{dailyVerse}</Text>
               </View>
 
               <View style={styles.nextRehearsalCard}>
