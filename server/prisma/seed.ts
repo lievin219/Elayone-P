@@ -18,10 +18,12 @@ async function main() {
   const choir = await prisma.choir.upsert(
     { where: { id: 'elayone-main-choir' }, update: {}, create: { id: 'elayone-main-choir', name: 'Elayone Choir', description: 'A choir serving with one voice.' } }
   );
+
+
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: { role: Role.ADMIN, passwordHash },
-    create: { name: 'Elayone Admin', email: adminEmail, passwordHash, role: Role.ADMIN },
+    create: { name: 'Elayone Admin main', email: adminEmail, passwordHash, role: Role.ADMIN },
   });
   await prisma.membership.upsert(
     { where: { userId_choirId: { userId: admin.id, choirId: choir.id } }, update: {}, create: { userId: admin.id, choirId: choir.id, vocalPart: VocalPart.SOPRANO } }
