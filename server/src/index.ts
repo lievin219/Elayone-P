@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json());
 app.get('/health', (_request, response) => response.json({ ok: true, service: 'elayone-choir-api' }));
 app.use('/api/auth', authRoutes);
-app.use('/api/choirs', requireAuth, choirRoutes);
+app.use('/api/choirs', requireAuth,requireAdmin, choirRoutes);
 app.use('/api/users', requireAuth, requireAdmin, userRoutes);
 
 const port = Number(process.env.PORT) || 4000;
