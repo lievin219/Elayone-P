@@ -140,3 +140,14 @@ model Song {
   choir      Choir    @relation(fields: [choirId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
 }
+model Artist{
+  id String
+  brandId String
+  title String
+  key String?
+  songs String
+  albums String?
+  concert String?
+  createdAt DateTime @default(now())
+
+}
