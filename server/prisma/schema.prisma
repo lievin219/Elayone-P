@@ -141,7 +141,7 @@ model Song {
   createdAt  DateTime @default(now())
 }
 model Artist{
-  id String
+  id String @id @default(cuid())
   brandId String
   title String
   key String?

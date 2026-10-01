@@ -319,6 +319,8 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [needsResponseOnly, setNeedsResponseOnly] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -331,7 +333,13 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
     return () => { active = false; };
   }, [reloadKey]);
 
-  const selectedMember = report?.members.find((member) => member.id === selectedMemberId) ?? null;
+  const personalMember = report?.members[0] ?? null;
+  const pendingMemberCount = report?.members.filter((member) => member.stats.pending > 0).length ?? 0;
+  const filteredMembers = (report?.members ?? []).filter((member) => {
+    const query = memberSearch.trim().toLowerCase();
+    const matchesSearch = !query || `${member.name} ${member.email ?? ''} ${member.vocalPart ?? ''}`.toLowerCase().includes(query);
+    return matchesSearch && (!needsResponseOnly || member.stats.pending > 0);
+  });
   const summary = report?.summary;
   const statusCounts = summary ? { YES: summary.yes, MAYBE: summary.maybe, NO: summary.no, PENDING: summary.pending } : null;
 
@@ -363,6 +371,16 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
             <ReportMetric value={`${summary.responseRate}%`} label="RESPONSE RATE" />
           </View>}
 
+          {!canManage && personalMember && <>
+            <View style={styles.reportSectionHeader}><Text style={styles.reportSectionTitle}>Your report snapshot</Text><Text style={styles.reportSectionMeta}>{personalMember.events.length} events</Text></View>
+            <View style={styles.reportMetricGrid}>
+              <ReportMetric value={`${personalMember.stats.responseRate}%`} label="REPLIED" />
+              <ReportMetric value={String(personalMember.stats.yes)} label="AVAILABLE" />
+              <ReportMetric value={String(personalMember.stats.no)} label="UNAVAILABLE" />
+              <ReportMetric value={String(personalMember.stats.pending)} label="NO REPLY" />
+            </View>
+          </>}
+
           <View style={styles.reportCard}>
             <View style={styles.reportCardHeader}>
               <View><Text style={styles.reportCardTitle}>{canManage ? 'Choir availability' : 'Your responses'}</Text><Text style={styles.reportCardCaption}>{summary.total} member/event responses</Text></View>
@@ -391,8 +409,21 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
                 </View>
               ))}
 
-              <View style={styles.reportSectionHeader}><Text style={styles.reportSectionTitle}>Member reports</Text><Text style={styles.reportSectionMeta}>{report.members.length} members</Text></View>
-              {report.members.length === 0 ? <ReportEmpty text="Choir members will appear here once they join." /> : report.members.map((member) => {
+              <View style={styles.reportSectionHeader}><Text style={styles.reportSectionTitle}>Individual reports</Text><Text style={styles.reportSectionMeta}>{report.members.length} members</Text></View>
+              <View style={styles.reportSearchWrap}>
+                <Ionicons name="search-outline" size={17} color={COLORS.muted} />
+                <TextInput value={memberSearch} onChangeText={setMemberSearch} placeholder="Find a member or vocal part" placeholderTextColor={COLORS.muted} accessibilityLabel="Search member reports" style={styles.reportSearchInput} />
+                {memberSearch.length > 0 && <TouchableOpacity onPress={() => setMemberSearch('')} accessibilityLabel="Clear member search"><Ionicons name="close-circle" size={17} color={COLORS.muted} /></TouchableOpacity>}
+              </View>
+              <View style={styles.reportFilterRow}>
+                <TouchableOpacity style={[styles.reportFilterChip, !needsResponseOnly && styles.reportFilterChipActive]} onPress={() => setNeedsResponseOnly(false)}>
+                  <Text style={[styles.reportFilterText, !needsResponseOnly && styles.reportFilterTextActive]}>All members · {report.members.length}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.reportFilterChip, needsResponseOnly && styles.reportFilterChipActive]} onPress={() => setNeedsResponseOnly(true)}>
+                  <Text style={[styles.reportFilterText, needsResponseOnly && styles.reportFilterTextActive]}>Needs reply · {pendingMemberCount}</Text>
+                </TouchableOpacity>
+              </View>
+              {report.members.length === 0 ? <ReportEmpty text="Choir members will appear here once they join." /> : filteredMembers.length === 0 ? <ReportEmpty text={memberSearch ? 'No member matches that search.' : 'No members are waiting to respond.'} /> : filteredMembers.map((member) => {
                 const expanded = selectedMemberId === member.id;
                 return <View key={member.id} style={styles.reportMemberCard}>
                   <TouchableOpacity style={styles.reportMemberTop} onPress={() => setSelectedMemberId(expanded ? null : member.id)} accessibilityRole="button" accessibilityLabel={`${expanded ? 'Hide' : 'View'} ${member.name}'s report`}>
@@ -400,15 +431,19 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
                     <View style={{ flex: 1 }}><Text style={styles.reportMemberName}>{member.name}</Text><Text style={styles.reportMemberMeta}>{member.vocalPart ?? 'Choir member'} · {member.stats.responseRate}% replied</Text></View>
                     <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.muted} />
                   </TouchableOpacity>
+                  <StatusDistribution counts={{ YES: member.stats.yes, MAYBE: member.stats.maybe, NO: member.stats.no, PENDING: member.stats.pending }} />
                   <View style={styles.reportMiniCounts}><Text style={styles.reportAvailableText}>YES {member.stats.yes}</Text><Text style={styles.reportMaybeText}>MAYBE {member.stats.maybe}</Text><Text style={styles.reportUnavailableText}>NO {member.stats.no}</Text><Text style={styles.reportPendingText}>PENDING {member.stats.pending}</Text></View>
-                  {expanded && <View style={styles.reportHistory}>{member.events.length === 0 ? <Text style={styles.reportHint}>No events recorded yet.</Text> : member.events.map((event) => <ReportHistoryRow key={event.rehearsalId} title={event.title} date={event.startsAt} location={event.location} status={event.status} />)}</View>}
+                  {expanded && <View style={styles.reportHistory}>
+                    <View style={styles.reportHistoryHeading}><Text style={styles.reportHistoryTitle}>{member.name} · event-by-event</Text><Text style={styles.reportSectionMeta}>{member.events.length} events</Text></View>
+                    {member.events.length === 0 ? <Text style={styles.reportHint}>No events recorded yet.</Text> : member.events.map((event) => <ReportHistoryRow key={event.rehearsalId} title={event.title} date={event.startsAt} location={event.location} status={event.status} />)}
+                  </View>}
                 </View>;
               })}
             </>
           ) : (
             <>
               <View style={styles.reportSectionHeader}><Text style={styles.reportSectionTitle}>Your event history</Text><Text style={styles.reportSectionMeta}>{report.members[0]?.events.length ?? 0} events</Text></View>
-              {(report.members[0]?.events.length ?? 0) === 0 ? <ReportEmpty text="Your event response history will appear here when rehearsals and services are scheduled." /> : report.members[0].events.map((event) => <ReportHistoryRow key={event.rehearsalId} title={event.title} date={event.startsAt} location={event.location} status={event.status} />)}
+              {(personalMember?.events.length ?? 0) === 0 ? <ReportEmpty text="Your event response history will appear here when rehearsals and services are scheduled." /> : personalMember?.events.map((event) => <ReportHistoryRow key={event.rehearsalId} title={event.title} date={event.startsAt} location={event.location} status={event.status} />)}
             </>
           )}
           <Text style={styles.reportGenerated}>Updated {new Date(report.generatedAt).toLocaleString()}</Text>
@@ -1045,6 +1080,13 @@ const styles = StyleSheet.create({
   reportSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3, marginBottom: 10 },
   reportSectionTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 21 },
   reportSectionMeta: { color: COLORS.muted, fontSize: 10, fontWeight: '700' },
+  reportSearchWrap: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, paddingHorizontal: 11, marginBottom: 9 },
+  reportSearchInput: { flex: 1, color: COLORS.ink, fontSize: 11, paddingVertical: 9 },
+  reportFilterRow: { flexDirection: 'row', gap: 7, marginBottom: 11 },
+  reportFilterChip: { borderWidth: 1, borderColor: COLORS.line, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: COLORS.white },
+  reportFilterChipActive: { borderColor: COLORS.ink, backgroundColor: COLORS.ink },
+  reportFilterText: { color: COLORS.muted, fontSize: 9, fontWeight: '700' },
+  reportFilterTextActive: { color: COLORS.white },
   reportEventCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 13, marginBottom: 9 },
   reportEventTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 8 },
   reportEventTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 },
@@ -1063,6 +1105,8 @@ const styles = StyleSheet.create({
   reportMemberMeta: { color: COLORS.muted, fontSize: 9, marginTop: 3 },
   reportMiniCounts: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 5, borderTopWidth: 1, borderTopColor: COLORS.line, paddingTop: 9, marginTop: 10 },
   reportHistory: { marginTop: 5 },
+  reportHistoryHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, paddingBottom: 3, borderTopWidth: 1, borderTopColor: COLORS.line },
+  reportHistoryTitle: { color: COLORS.ink, fontSize: 10, fontWeight: '800' },
   reportHistoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.line, paddingVertical: 12 },
   reportPill: { borderRadius: 11, paddingHorizontal: 8, paddingVertical: 5 },
   reportPillYes: { backgroundColor: '#edf2ec' },
