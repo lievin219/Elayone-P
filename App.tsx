@@ -16,10 +16,10 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { AttendanceSummary, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, getAllUsers, getAttendanceSummary, getRehearsals, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, RehearsalRecord, Session, signIn, signOut, signUp, updateAttendance, updateUserRole } from './src/api';
+import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, RehearsalRecord, Session, signIn, signOut, signUp, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
-type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Admin';
+type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
 
 type Rehearsal = RehearsalRecord & { color: string };
 
@@ -293,7 +293,7 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Admin' ? <AdminPanel announcements={announcements} onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [{ ...nextAnnouncement, authorName: nextAnnouncement.authorName ?? session?.user.name ?? 'Admin' }, ...current]); setHasNewAnnouncements(true); }} onAnnouncementDeleted={(id) => { setAnnouncements((current) => {
+          ) : activeTab === 'Reports' ? <AttendanceReportScreen canManage={isAdmin} /> : activeTab === 'Admin' ? <AdminPanel announcements={announcements} onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [{ ...nextAnnouncement, authorName: nextAnnouncement.authorName ?? session?.user.name ?? 'Admin' }, ...current]); setHasNewAnnouncements(true); }} onAnnouncementDeleted={(id) => { setAnnouncements((current) => {
             const next = current.filter((announcement) => announcement.id !== id);
             setHasNewAnnouncements(next.length > 0);
             return next;
@@ -302,8 +302,8 @@ export default function App() {
           )}
         </ScrollView>
         <View style={styles.bottomNav}>
-          {(['Home', 'Rehearsals', 'People', 'Songs', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
-            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Rehearsals' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : 'shield-checkmark-outline';
+          {(['Home', 'Rehearsals', 'People', 'Songs', 'Reports', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
+            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Rehearsals' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : tab === 'Reports' ? 'stats-chart-outline' : 'shield-checkmark-outline';
             const active = activeTab === tab;
             return <TouchableOpacity key={tab} style={styles.navItem} onPress={() => setActiveTab(tab)}><View style={[styles.navIconWrap, active && styles.navIconActive]}><Ionicons name={icon} size={21} color={active ? COLORS.white : COLORS.muted} /></View><Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text></TouchableOpacity>;
           })}
@@ -311,6 +311,140 @@ export default function App() {
       </View>
     </SafeAreaView>
   );
+}
+
+function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
+  const [report, setReport] = useState<AttendanceReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    getAttendanceReport('elayone-main-choir')
+      .then((result) => { if (active) setReport(result); })
+      .catch((requestError) => { if (active) setError(requestError instanceof Error ? requestError.message : 'Unable to load attendance reports.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [reloadKey]);
+
+  const selectedMember = report?.members.find((member) => member.id === selectedMemberId) ?? null;
+  const summary = report?.summary;
+  const statusCounts = summary ? { YES: summary.yes, MAYBE: summary.maybe, NO: summary.no, PENDING: summary.pending } : null;
+
+  return (
+    <View>
+      <View style={styles.reportHeadingRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pageEyebrow}>ELAYONE / REPORTS</Text>
+          <Text style={styles.pageTitle}>{canManage ? 'Choir reports' : 'My attendance'}</Text>
+        </View>
+        <TouchableOpacity style={styles.reportRefresh} onPress={() => setReloadKey((current) => current + 1)} accessibilityLabel="Refresh attendance report">
+          <Ionicons name="refresh-outline" size={19} color={COLORS.ink} />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.pageCaption}>{canManage ? 'See availability and response history across the whole choir.' : 'Review your responses and how consistently you have replied.'}</Text>
+
+      {loading ? <View style={styles.reportLoading}><ActivityIndicator color={COLORS.ink} /><Text style={styles.reportHint}>Loading attendance report…</Text></View> : error ? (
+        <View style={styles.reportError}><Text style={styles.reportErrorText}>{error}</Text><TouchableOpacity onPress={() => setReloadKey((current) => current + 1)}><Text style={styles.reportRetry}>Try again</Text></TouchableOpacity></View>
+      ) : report && summary ? (
+        <>
+          <View style={styles.reportNotice}>
+            <Ionicons name="information-circle-outline" size={17} color={COLORS.olive} />
+            <Text style={styles.reportNoticeText}>These are availability responses: “Available” means the member selected YES. No response is shown separately from “Unavailable.”</Text>
+          </View>
+
+          {canManage && <View style={styles.reportMetricGrid}>
+            <ReportMetric value={String(summary.members)} label="CHOIR MEMBERS" />
+            <ReportMetric value={String(summary.rehearsals)} label="EVENTS" />
+            <ReportMetric value={`${summary.responseRate}%`} label="RESPONSE RATE" />
+          </View>}
+
+          <View style={styles.reportCard}>
+            <View style={styles.reportCardHeader}>
+              <View><Text style={styles.reportCardTitle}>{canManage ? 'Choir availability' : 'Your responses'}</Text><Text style={styles.reportCardCaption}>{summary.total} member/event responses</Text></View>
+              <Text style={styles.reportRate}>{summary.responseRate}%</Text>
+            </View>
+            {statusCounts && <StatusDistribution counts={statusCounts} />}
+            <View style={styles.reportLegend}>
+              <ReportLegend color={COLORS.olive} label={`Available ${summary.yes}`} />
+              <ReportLegend color="#c3a877" label={`Maybe ${summary.maybe}`} />
+              <ReportLegend color={COLORS.clay} label={`Unavailable ${summary.no}`} />
+              <ReportLegend color="#c9c9c4" label={`No response ${summary.pending}`} />
+            </View>
+          </View>
+
+          {canManage ? (
+            <>
+              <View style={styles.reportSectionHeader}><Text style={styles.reportSectionTitle}>Event breakdown</Text><Text style={styles.reportSectionMeta}>{report.events.length} total</Text></View>
+              {report.events.length === 0 ? <ReportEmpty text="Event response summaries will appear after you add a rehearsal or service." /> : report.events.map((event) => (
+                <View key={event.id} style={styles.reportEventCard}>
+                  <View style={styles.reportEventTop}>
+                    <View style={{ flex: 1 }}><Text style={styles.reportEventTitle}>{event.title}</Text><Text style={styles.reportEventMeta}>{new Date(event.startsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · {event.location}</Text></View>
+                    <Text style={styles.reportEventType}>{event.eventType.replace('_', ' ')}</Text>
+                  </View>
+                  <StatusDistribution counts={{ YES: event.totals.yes, MAYBE: event.totals.maybe, NO: event.totals.no, PENDING: event.totals.pending }} />
+                  <View style={styles.reportEventCounts}><Text style={styles.reportAvailableText}>{event.totals.yes} available</Text><Text style={styles.reportMaybeText}>{event.totals.maybe} maybe</Text><Text style={styles.reportUnavailableText}>{event.totals.no} unavailable</Text><Text style={styles.reportPendingText}>{event.totals.pending} no reply</Text></View>
+                </View>
+              ))}
+
+              <View style={styles.reportSectionHeader}><Text style={styles.reportSectionTitle}>Member reports</Text><Text style={styles.reportSectionMeta}>{report.members.length} members</Text></View>
+              {report.members.length === 0 ? <ReportEmpty text="Choir members will appear here once they join." /> : report.members.map((member) => {
+                const expanded = selectedMemberId === member.id;
+                return <View key={member.id} style={styles.reportMemberCard}>
+                  <TouchableOpacity style={styles.reportMemberTop} onPress={() => setSelectedMemberId(expanded ? null : member.id)} accessibilityRole="button" accessibilityLabel={`${expanded ? 'Hide' : 'View'} ${member.name}'s report`}>
+                    <View style={styles.reportMemberAvatar}><Text style={styles.reportMemberInitial}>{member.name.slice(0, 1).toUpperCase()}</Text></View>
+                    <View style={{ flex: 1 }}><Text style={styles.reportMemberName}>{member.name}</Text><Text style={styles.reportMemberMeta}>{member.vocalPart ?? 'Choir member'} · {member.stats.responseRate}% replied</Text></View>
+                    <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={COLORS.muted} />
+                  </TouchableOpacity>
+                  <View style={styles.reportMiniCounts}><Text style={styles.reportAvailableText}>YES {member.stats.yes}</Text><Text style={styles.reportMaybeText}>MAYBE {member.stats.maybe}</Text><Text style={styles.reportUnavailableText}>NO {member.stats.no}</Text><Text style={styles.reportPendingText}>PENDING {member.stats.pending}</Text></View>
+                  {expanded && <View style={styles.reportHistory}>{member.events.length === 0 ? <Text style={styles.reportHint}>No events recorded yet.</Text> : member.events.map((event) => <ReportHistoryRow key={event.rehearsalId} title={event.title} date={event.startsAt} location={event.location} status={event.status} />)}</View>}
+                </View>;
+              })}
+            </>
+          ) : (
+            <>
+              <View style={styles.reportSectionHeader}><Text style={styles.reportSectionTitle}>Your event history</Text><Text style={styles.reportSectionMeta}>{report.members[0]?.events.length ?? 0} events</Text></View>
+              {(report.members[0]?.events.length ?? 0) === 0 ? <ReportEmpty text="Your event response history will appear here when rehearsals and services are scheduled." /> : report.members[0].events.map((event) => <ReportHistoryRow key={event.rehearsalId} title={event.title} date={event.startsAt} location={event.location} status={event.status} />)}
+            </>
+          )}
+          <Text style={styles.reportGenerated}>Updated {new Date(report.generatedAt).toLocaleString()}</Text>
+        </>
+      ) : <ReportEmpty text="No attendance report is available yet." />}
+    </View>
+  );
+}
+
+function ReportMetric({ value, label }: { value: string; label: string }) {
+  return <View style={styles.reportMetric}><Text style={styles.reportMetricValue}>{value}</Text><Text style={styles.reportMetricLabel}>{label}</Text></View>;
+}
+
+function StatusDistribution({ counts }: { counts: Record<AttendanceResponseStatus, number> }) {
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  const segments: Array<{ key: AttendanceResponseStatus; color: string }> = [
+    { key: 'YES', color: COLORS.olive }, { key: 'MAYBE', color: '#c3a877' }, { key: 'NO', color: COLORS.clay }, { key: 'PENDING', color: '#c9c9c4' },
+  ];
+  return <View style={styles.reportBar}>{segments.map(({ key, color }) => <View key={key} style={{ width: `${total ? (counts[key] / total) * 100 : 0}%`, height: '100%', backgroundColor: color }} />)}</View>;
+}
+
+function ReportLegend({ color, label }: { color: string; label: string }) {
+  return <View style={styles.reportLegendItem}><View style={[styles.reportLegendDot, { backgroundColor: color }]} /><Text style={styles.reportLegendText}>{label}</Text></View>;
+}
+
+function ReportHistoryRow({ title, date, location, status }: { title: string; date: string; location: string; status: AttendanceResponseStatus }) {
+  const labels: Record<AttendanceResponseStatus, string> = { YES: 'Available', MAYBE: 'Maybe', NO: 'Unavailable', PENDING: 'No response' };
+  const pillStyle = status === 'YES' ? styles.reportPillYes : status === 'MAYBE' ? styles.reportPillMaybe : status === 'NO' ? styles.reportPillNo : styles.reportPillPending;
+  return <View style={styles.reportHistoryRow}>
+    <View style={{ flex: 1 }}><Text style={styles.reportEventTitle}>{title}</Text><Text style={styles.reportEventMeta}>{new Date(date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · {location}</Text></View>
+    <View style={[styles.reportPill, pillStyle]}><Text style={styles.reportPillText}>{labels[status]}</Text></View>
+  </View>;
+}
+
+function ReportEmpty({ text }: { text: string }) {
+  return <View style={styles.reportEmpty}><Ionicons name="bar-chart-outline" size={22} color={COLORS.muted} /><Text style={styles.reportEmptyText}>{text}</Text></View>;
 }
 
 function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, onSongAdded, onRehearsalAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; onSongAdded: (song: SongItem) => void; onRehearsalAdded: (rehearsal: Rehearsal) => void }) {
@@ -890,6 +1024,60 @@ function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal,
 const COLORS = { ink: '#171717', muted: '#797975', line: '#e5e3de', paper: '#f7f7f5', white: '#ffffff', olive: '#708067', clay: '#a76e5b' };
 
 const styles = StyleSheet.create({
+  reportHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reportRefresh: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
+  reportNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, backgroundColor: '#eef2ec', borderRadius: 4, marginBottom: 14 },
+  reportNoticeText: { flex: 1, color: '#53614d', fontSize: 10, lineHeight: 15 },
+  reportMetricGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  reportMetric: { flex: 1, minHeight: 75, justifyContent: 'center', backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, paddingHorizontal: 12, paddingVertical: 11 },
+  reportMetricValue: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 25 },
+  reportMetricLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.7, marginTop: 5 },
+  reportCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 15, marginBottom: 24 },
+  reportCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
+  reportCardTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18 },
+  reportCardCaption: { color: COLORS.muted, fontSize: 10, marginTop: 4 },
+  reportRate: { color: COLORS.olive, fontFamily: 'Georgia', fontSize: 24 },
+  reportBar: { height: 10, flexDirection: 'row', backgroundColor: '#efefeb', overflow: 'hidden', borderRadius: 5 },
+  reportLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 13 },
+  reportLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  reportLegendDot: { width: 7, height: 7, borderRadius: 4 },
+  reportLegendText: { color: COLORS.muted, fontSize: 9 },
+  reportSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 3, marginBottom: 10 },
+  reportSectionTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 21 },
+  reportSectionMeta: { color: COLORS.muted, fontSize: 10, fontWeight: '700' },
+  reportEventCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 13, marginBottom: 9 },
+  reportEventTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 8 },
+  reportEventTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 },
+  reportEventMeta: { color: COLORS.muted, fontSize: 9, lineHeight: 14, marginTop: 4 },
+  reportEventType: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
+  reportEventCounts: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 5, marginTop: 9 },
+  reportAvailableText: { color: COLORS.olive, fontSize: 8, fontWeight: '800' },
+  reportMaybeText: { color: '#9c7c43', fontSize: 8, fontWeight: '800' },
+  reportUnavailableText: { color: COLORS.clay, fontSize: 8, fontWeight: '800' },
+  reportPendingText: { color: COLORS.muted, fontSize: 8, fontWeight: '800' },
+  reportMemberCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, paddingHorizontal: 12, paddingVertical: 11, marginBottom: 8 },
+  reportMemberTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  reportMemberAvatar: { width: 35, height: 35, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e8e3d9' },
+  reportMemberInitial: { color: COLORS.ink, fontSize: 13, fontWeight: '800' },
+  reportMemberName: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 },
+  reportMemberMeta: { color: COLORS.muted, fontSize: 9, marginTop: 3 },
+  reportMiniCounts: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 5, borderTopWidth: 1, borderTopColor: COLORS.line, paddingTop: 9, marginTop: 10 },
+  reportHistory: { marginTop: 5 },
+  reportHistoryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.line, paddingVertical: 12 },
+  reportPill: { borderRadius: 11, paddingHorizontal: 8, paddingVertical: 5 },
+  reportPillYes: { backgroundColor: '#edf2ec' },
+  reportPillMaybe: { backgroundColor: '#f5f0e6' },
+  reportPillNo: { backgroundColor: '#f8eeeb' },
+  reportPillPending: { backgroundColor: '#efefec' },
+  reportPillText: { color: COLORS.ink, fontSize: 8, fontWeight: '800' },
+  reportGenerated: { color: COLORS.muted, fontSize: 9, textAlign: 'center', marginTop: 15, marginBottom: 12 },
+  reportLoading: { minHeight: 110, alignItems: 'center', justifyContent: 'center', gap: 9 },
+  reportHint: { color: COLORS.muted, fontSize: 10, lineHeight: 16 },
+  reportError: { backgroundColor: '#fdf1ef', borderWidth: 1, borderColor: '#e9c8c2', borderRadius: 4, padding: 14, marginBottom: 12 },
+  reportErrorText: { color: '#7c2f2f', fontSize: 11, lineHeight: 17 },
+  reportRetry: { color: COLORS.ink, fontSize: 11, fontWeight: '800', marginTop: 9 },
+  reportEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 22, marginBottom: 12 },
+  reportEmptyText: { color: COLORS.muted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 9 },
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.paper },
   authSafeArea: { flex: 1, backgroundColor: '#f4efe8' },
   authShell: { flex: 1, justifyContent: 'center' },
@@ -1021,6 +1209,6 @@ const styles = StyleSheet.create({
   notificationMessage: { color: COLORS.muted, fontSize: 12, lineHeight: 19 },
   nextRehearsalCard: { backgroundColor: COLORS.white, borderRadius: 5, padding: 20, borderWidth: 1, borderColor: '#eeece7', marginBottom: 29 }, cardTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.25 }, livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ec', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginRight: 5 }, liveText: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, rehearsalTitle: { fontFamily: 'Georgia', fontSize: 24, color: COLORS.ink, marginTop: 19 }, detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 }, detailText: { color: COLORS.muted, fontSize: 12, marginLeft: 5 }, detailIcon: { marginLeft: 14 }, cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, marginTop: 19, paddingTop: 15 }, avatarStack: { flexDirection: 'row', width: 62 }, avatar: { width: 25, height: 25, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.white, justifyContent: 'center', alignItems: 'center' }, avatarText: { fontSize: 9, fontWeight: '800', color: COLORS.ink }, attendanceText: { color: COLORS.muted, fontSize: 11, flex: 1 }, checkInButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ink, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 3, gap: 7 }, checkInText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }, sectionTitle: { fontFamily: 'Georgia', color: COLORS.ink, fontSize: 21 }, sectionCaption: { fontSize: 11, color: COLORS.muted, marginTop: 4 }, seeAll: { color: COLORS.ink, fontSize: 12, fontWeight: '800', textDecorationLine: 'underline' }, weekGrid: { flexDirection: 'row', gap: 8, marginBottom: 31 }, weekMetric: { flex: 1, backgroundColor: COLORS.white, borderWidth: 1, borderColor: '#eeece7', padding: 13, borderRadius: 4 }, metricNumber: { fontFamily: 'Georgia', fontSize: 30, color: COLORS.ink }, metricPercent: { fontFamily: 'Georgia', fontSize: 17 }, metricLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.8, marginTop: 7 }, metricRule: { height: 3, backgroundColor: COLORS.ink, width: 26, marginTop: 12, marginBottom: 8 }, metricFoot: { color: COLORS.muted, fontSize: 9 }, quickGrid: { gap: 8 }, quickAction: { backgroundColor: COLORS.white, borderColor: COLORS.line, borderWidth: 1, minHeight: 55, borderRadius: 4, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11 }, quickIcon: { width: 33, height: 33, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, quickLabel: { color: COLORS.ink, fontWeight: '700', fontSize: 13, flex: 1 },
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 82, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10 }, navItem: { alignItems: 'center', width: 75 }, navIconWrap: { width: 31, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, navIconActive: { backgroundColor: COLORS.ink }, navLabel: { color: COLORS.muted, fontSize: 10, marginTop: 6 }, navLabelActive: { color: COLORS.ink, fontWeight: '800' },
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 82, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10 }, navItem: { alignItems: 'center', flex: 1 }, navIconWrap: { width: 31, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, navIconActive: { backgroundColor: COLORS.ink }, navLabel: { color: COLORS.muted, fontSize: 10, marginTop: 6 }, navLabelActive: { color: COLORS.ink, fontWeight: '800' },
   pageEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 12 }, pageTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 38 }, pageCaption: { color: COLORS.muted, fontSize: 14, marginTop: 8, marginBottom: 24 }, addButton: { backgroundColor: COLORS.ink, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 3, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 7, marginBottom: 28 }, addButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' }, listLabel: { color: COLORS.muted, fontSize: 10, letterSpacing: 1.4, fontWeight: '800', marginBottom: 10 }, rehearsalListItem: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, padding: 10, borderRadius: 4, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, rehearsalListSelected: { borderColor: COLORS.olive, borderWidth: 1.5 }, dateBlock: { width: 48, height: 61, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 12 }, dateDay: { color: COLORS.white, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, dateNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 24, lineHeight: 25 }, dateMonth: { color: COLORS.white, fontSize: 8, fontWeight: '800' }, listMain: { flex: 1 }, listTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, listMeta: { color: COLORS.muted, fontSize: 10, marginTop: 5 }, listAttendance: { color: COLORS.olive, fontSize: 10, fontWeight: '700', marginTop: 6 }, peopleSummary: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 19, flexDirection: 'row', alignItems: 'center', marginBottom: 22 }, peopleNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 45, marginRight: 16 }, peopleTitle: { color: COLORS.white, fontSize: 15, fontWeight: '800' }, peopleCaption: { color: '#aaa9a3', fontSize: 11, marginTop: 5 }, personRow: { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.line, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }, personAvatar: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 }, personInitials: { color: COLORS.ink, fontSize: 12, fontWeight: '800' }, personInfo: { flex: 1 }, personName: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, personRole: { color: COLORS.muted, fontSize: 11, marginTop: 4 }, songFeatured: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 17, flexDirection: 'row', alignItems: 'center', marginBottom: 21 }, songIconLarge: { width: 45, height: 45, backgroundColor: COLORS.clay, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 13 }, songFeatureLabel: { color: '#b7b5ad', fontSize: 8, fontWeight: '800', letterSpacing: 1.2 }, songFeatureTitle: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 20, marginTop: 6 }, songFeatureMeta: { color: '#b7b5ad', fontSize: 10, marginTop: 5 }, songRow: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, songRowMain: { flex: 1, flexDirection: 'row', alignItems: 'center' }, songIcon: { width: 36, height: 36, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, songInfo: { flex: 1 }, songTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 }, songMeta: { color: COLORS.muted, fontSize: 10, marginTop: 4 }, songStatus: { backgroundColor: '#f4e7e2', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, readyStatus: { backgroundColor: '#eef2ec' }, songStatusText: { color: COLORS.clay, fontSize: 9, fontWeight: '800' }, readyStatusText: { color: COLORS.olive }, songPlayButton: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginLeft: 10 }, 
 });

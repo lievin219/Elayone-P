@@ -24,3 +24,14 @@ export async function requireAdmin(request: AuthRequest, response: Response, nex
   if (!user || (user.role !== 'ADMIN' && user.role !== 'LEADER')) return response.status(403).json({ message: 'Only choir leaders can perform this action.' });
   return next();
 }
+
+export async function requireChoirAccess(request: AuthRequest, response: Response, next: NextFunction) {
+  if (!request.userId) return response.status(401).json({ message: 'Authentication is required.' });
+  const choirId = String(request.params.choirId);
+  const [user, membership] = await Promise.all([
+    prisma.user.findUnique({ where: { id: request.userId }, select: { role: true } }),
+    prisma.membership.findUnique({ where: { userId_choirId: { userId: request.userId, choirId } }, select: { id: true } }),
+  ]);
+  if (user?.role === 'ADMIN' || user?.role === 'LEADER' || membership) return next();
+  return response.status(403).json({ message: 'You must belong to this choir to access its information.' });
+}
