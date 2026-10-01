@@ -49,6 +49,7 @@ model User {
   memberships  Membership[]
   attendances  Attendance[]
   assignments  Assignment[]
+  eventInvitations EventInvitation[]
   announcements Announcement[] @relation("AnnouncementAuthor")
 }
 
@@ -88,6 +89,7 @@ model Rehearsal {
   attendances   Attendance[]
   assignments   Assignment[]
   announcements Announcement[]
+  invitations  EventInvitation[]
   createdAt     DateTime       @default(now())
 }
 
@@ -127,6 +129,17 @@ model Assignment {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([rehearsalId, userId, part])
+}
+
+model EventInvitation {
+  id          String    @id @default(cuid())
+  rehearsalId String
+  userId      String
+  createdAt   DateTime  @default(now())
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([rehearsalId, userId])
 }
 
 model Song {

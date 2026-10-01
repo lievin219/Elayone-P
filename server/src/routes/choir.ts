@@ -19,9 +19,44 @@ router.delete('/:choirId/people/:userId', requireAdmin, async (request, response
   return response.status(204).send();
 });
 
-router.get('/:choirId/rehearsals', requireChoirAccess, async (request, response) => {
-  const rehearsals = await prisma.rehearsal.findMany({ where: { choirId: String(request.params.choirId) }, orderBy: { startsAt: 'asc' }, include: { attendances: true } });
-  return response.json(rehearsals);
+router.get('/:choirId/rehearsals', requireChoirAccess, async (request: AuthRequest, response) => {
+  const userId = request.userId as string;
+  const choirId = String(request.params.choirId);
+  const viewer = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  const canManage = viewer?.role === 'ADMIN' || viewer?.role === 'LEADER';
+  const rehearsals = await prisma.rehearsal.findMany({
+    where: { choirId },
+    orderBy: { startsAt: 'asc' },
+    include: {
+      attendances: { select: { userId: true, status: true } },
+      invitations: { include: { user: { select: { id: true, name: true } } } },
+    },
+  });
+  const choirMembers = canManage ? await prisma.membership.findMany({
+    where: { choirId },
+    include: { user: { select: { id: true, name: true } } },
+    orderBy: { user: { name: 'asc' } },
+  }) : [];
+  const visibleEvents = rehearsals.filter((event) => canManage || event.invitations.length === 0 || event.invitations.some((invitation) => invitation.userId === userId));
+  return response.json(visibleEvents.map((event) => ({
+    id: event.id,
+    title: event.title,
+    eventType: event.eventType,
+    location: event.location,
+    startsAt: event.startsAt,
+    endsAt: event.endsAt,
+    createdAt: event.createdAt,
+    invitationOnly: event.invitations.length > 0,
+    invited: event.invitations.length === 0 || event.invitations.some((invitation) => invitation.userId === userId),
+    myStatus: event.attendances.find((attendance) => attendance.userId === userId)?.status ?? 'PENDING',
+    confirmedCount: event.attendances.filter((attendance) => attendance.status === 'YES').length,
+    invitees: canManage ? (event.invitations.length > 0
+      ? event.invitations.map((invitation) => ({ userId: invitation.userId, name: invitation.user.name }))
+      : choirMembers.map((member) => ({ userId: member.user.id, name: member.user.name }))).map((invitee) => ({
+        ...invitee,
+        status: event.attendances.find((attendance) => attendance.userId === invitee.userId)?.status ?? 'PENDING',
+      })) : undefined,
+  })));
 });
 
 router.get('/:choirId/attendance/summary', requireChoirAccess, async (request: AuthRequest, response) => {
@@ -56,20 +91,25 @@ router.get('/:choirId/attendance/report', requireChoirAccess, async (request: Au
 
   const rehearsals = await prisma.rehearsal.findMany({
     where: { choirId },
-    include: { attendances: { select: { userId: true, status: true } } },
+    include: {
+      attendances: { select: { userId: true, status: true } },
+      invitations: { select: { userId: true } },
+    },
     orderBy: { startsAt: 'desc' },
   });
   const members = memberships.map((membership) => {
-    const events = rehearsals.map((rehearsal) => {
+    const events = rehearsals.flatMap((rehearsal) => {
+      const inviteeIds = rehearsal.invitations.map((invitation) => invitation.userId);
+      if (inviteeIds.length > 0 && !inviteeIds.includes(membership.userId)) return [];
       const status = rehearsal.attendances.find((entry) => entry.userId === membership.userId)?.status ?? 'PENDING';
-      return {
+      return [{
         rehearsalId: rehearsal.id,
         title: rehearsal.title,
         eventType: rehearsal.eventType,
         startsAt: rehearsal.startsAt.toISOString(),
         location: rehearsal.location,
         status,
-      };
+      }];
     });
     const yes = events.filter((event) => event.status === 'YES').length;
     const maybe = events.filter((event) => event.status === 'MAYBE').length;
@@ -86,7 +126,7 @@ router.get('/:choirId/attendance/report', requireChoirAccess, async (request: Au
     };
   });
 
-  const total = members.length * rehearsals.length;
+  const total = members.reduce((count, member) => count + member.events.length, 0);
   const summary = members.reduce((counts, member) => ({
     yes: counts.yes + member.stats.yes,
     maybe: counts.maybe + member.stats.maybe,
@@ -95,11 +135,10 @@ router.get('/:choirId/attendance/report', requireChoirAccess, async (request: Au
   }), { yes: 0, maybe: 0, no: 0, pending: 0 });
   const responded = summary.yes + summary.maybe + summary.no;
   const events = rehearsals.map((rehearsal) => {
-    const responses = members.map((member) => ({
-      userId: member.id,
-      name: member.name,
-      status: member.events.find((event) => event.rehearsalId === rehearsal.id)?.status ?? 'PENDING',
-    }));
+    const responses = members.flatMap((member) => {
+      const memberEvent = member.events.find((event) => event.rehearsalId === rehearsal.id);
+      return memberEvent ? [{ userId: member.id, name: member.name, status: memberEvent.status }] : [];
+    });
     return {
       id: rehearsal.id,
       title: rehearsal.title,
@@ -126,11 +165,46 @@ router.get('/:choirId/attendance/report', requireChoirAccess, async (request: Au
 });
 
 router.post('/:choirId/rehearsals', requireAdmin, async (request, response) => {
-  const { title, startsAt, endsAt, location, eventType } = request.body;
+  const { title, startsAt, endsAt, location, eventType, inviteeIds } = request.body;
   if (!title || !startsAt || !endsAt || !location) return response.status(400).json({ message: 'Title, dates, and location are required.' });
+  const startDate = new Date(startsAt);
+  const endDate = new Date(endsAt);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+    return response.status(400).json({ message: 'Enter a valid event start and end time; the end must be after the start.' });
+  }
+  if (inviteeIds !== undefined && (!Array.isArray(inviteeIds) || inviteeIds.length === 0 || inviteeIds.some((id) => typeof id !== 'string'))) {
+    return response.status(400).json({ message: 'Select at least one choir member to invite, or omit inviteeIds for the whole choir.' });
+  }
+  const choirId = String(request.params.choirId);
+  const selectedInviteeIds = inviteeIds === undefined ? [] : [...new Set(inviteeIds as string[])];
+  if (selectedInviteeIds.length > 0) {
+    const memberships = await prisma.membership.findMany({ where: { choirId, userId: { in: selectedInviteeIds } }, select: { userId: true } });
+    if (memberships.length !== selectedInviteeIds.length) return response.status(400).json({ message: 'Every invitee must be an active member of this choir.' });
+  }
   const normalizedType = ['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT'].includes(eventType) ? eventType : 'REHEARSAL';
-  const rehearsal = await prisma.rehearsal.create({ data: { choirId: String(request.params.choirId), title, eventType: normalizedType, startsAt: new Date(startsAt), endsAt: new Date(endsAt), location } });
-  return response.status(201).json(rehearsal);
+  const rehearsal = await prisma.$transaction(async (transaction) => {
+    const created = await transaction.rehearsal.create({ data: { choirId, title: String(title).trim(), eventType: normalizedType, startsAt: startDate, endsAt: endDate, location: String(location).trim() } });
+    if (selectedInviteeIds.length > 0) {
+      await transaction.eventInvitation.createMany({ data: selectedInviteeIds.map((userId) => ({ rehearsalId: created.id, userId })) });
+    }
+    return {
+      ...created,
+      invitations: await transaction.eventInvitation.findMany({ where: { rehearsalId: created.id }, include: { user: { select: { id: true, name: true } } } }),
+    };
+  });
+  return response.status(201).json({
+    id: rehearsal.id,
+    title: rehearsal.title,
+    eventType: rehearsal.eventType,
+    location: rehearsal.location,
+    startsAt: rehearsal.startsAt,
+    endsAt: rehearsal.endsAt,
+    invitationOnly: rehearsal.invitations.length > 0,
+    invited: true,
+    myStatus: 'PENDING',
+    confirmedCount: 0,
+    invitees: rehearsal.invitations.map((invitation) => ({ userId: invitation.userId, name: invitation.user.name, status: 'PENDING' })),
+  });
 });
 
 router.post('/:choirId/rehearsals/:rehearsalId/attendance', requireChoirAccess, async (request: AuthRequest, response) => {
@@ -139,9 +213,11 @@ router.post('/:choirId/rehearsals/:rehearsalId/attendance', requireChoirAccess, 
   const userId = request.userId as string;
   const [membership, rehearsal] = await Promise.all([
     prisma.membership.findUnique({ where: { userId_choirId: { userId, choirId: String(request.params.choirId) } } }),
-    prisma.rehearsal.findFirst({ where: { id: rehearsalId, choirId: String(request.params.choirId) }, select: { id: true } }),
+    prisma.rehearsal.findFirst({ where: { id: rehearsalId, choirId: String(request.params.choirId) }, include: { invitations: { where: { userId }, select: { id: true } } } }),
   ]);
   if (!membership || !rehearsal) return response.status(403).json({ message: 'You cannot respond to attendance for this choir event.' });
+  const invitationCount = await prisma.eventInvitation.count({ where: { rehearsalId } });
+  if (invitationCount > 0 && rehearsal.invitations.length === 0) return response.status(403).json({ message: 'This event is invitation-only, and you were not invited.' });
   const attendance = await prisma.attendance.upsert({ where: { rehearsalId_userId: { rehearsalId, userId } }, update: { status, present: status === 'YES' }, create: { rehearsalId, userId, status, present: status === 'YES' } });
   return response.json(attendance);
 });

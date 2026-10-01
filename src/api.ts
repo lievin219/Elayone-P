@@ -192,6 +192,11 @@ export type RehearsalRecord = {
   location: string;
   startsAt: string;
   endsAt: string;
+  invitationOnly?: boolean;
+  invited?: boolean;
+  myStatus?: AttendanceResponseStatus;
+  confirmedCount?: number;
+  invitees?: Array<{ userId: string; name: string; status: AttendanceResponseStatus }>;
   attendances?: Array<{ id: string; status: 'YES' | 'MAYBE' | 'NO' | 'PENDING'; userId: string }>;
 };
 
@@ -211,8 +216,8 @@ export async function updateUserRole(userId: string, role: Role) {
   return request<User>(`/api/users/${userId}/role`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ role }) });
 }
 
-export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string; eventType?: EventType }) {
-  return request(`/api/choirs/${choirId}/rehearsals`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
+export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string; eventType?: EventType; inviteeIds?: string[] }) {
+  return request<RehearsalRecord>(`/api/choirs/${choirId}/rehearsals`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }
 
 export async function publishAnnouncement(choirId: string, data: { title: string; message: string; priority: 'NORMAL' | 'IMPORTANT' }) {

@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, RehearsalRecord, Session, signIn, signOut, signUp, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
-type Tab = 'Home' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
+type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
 
 type Rehearsal = RehearsalRecord & { color: string };
 
@@ -277,7 +277,7 @@ export default function App() {
 
               <View style={styles.sectionHeader}>
                 <View><Text style={styles.sectionTitle}>This week</Text><Text style={styles.sectionCaption}>Keep the rhythm going</Text></View>
-                <TouchableOpacity onPress={() => setActiveTab('Rehearsals')}><Text style={styles.seeAll}>See all</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setActiveTab('Calendar')}><Text style={styles.seeAll}>See all</Text></TouchableOpacity>
               </View>
               <View style={styles.weekGrid}>
                 <View style={styles.weekMetric}><Text style={styles.metricNumber}>{String(upcomingRehearsalCount).padStart(2, '0')}</Text><Text style={styles.metricLabel}>REHEARSALS</Text><View style={styles.metricRule} /><Text style={styles.metricFoot}>upcoming</Text></View>
@@ -287,13 +287,21 @@ export default function App() {
 
               <View style={styles.sectionHeader}><View><Text style={styles.sectionTitle}>Quick access</Text><Text style={styles.sectionCaption}>What do you need today?</Text></View></View>
               <View style={styles.quickGrid}>
-                <QuickAction icon="calendar-outline" label="Plan rehearsal" onPress={() => setActiveTab('Rehearsals')} />
+                <QuickAction icon="calendar-outline" label="Open calendar" onPress={() => setActiveTab('Calendar')} />
                 <QuickAction icon="people-outline" label="View choir" onPress={() => setActiveTab('People')} />
                 <QuickAction icon="musical-notes-outline" label="Song library" onPress={() => setActiveTab('Songs')} />
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Reports' ? <AttendanceReportScreen canManage={isAdmin} /> : activeTab === 'Admin' ? <AdminPanel announcements={announcements} onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [{ ...nextAnnouncement, authorName: nextAnnouncement.authorName ?? session?.user.name ?? 'Admin' }, ...current]); setHasNewAnnouncements(true); }} onAnnouncementDeleted={(id) => { setAnnouncements((current) => {
+          ) : activeTab === 'Calendar' ? <CalendarScreen events={orderedRehearsals} canManage={isAdmin} onRespond={async (eventId, status) => {
+            try {
+              await updateAttendance('elayone-main-choir', eventId, status);
+              const updatedEvents = await getRehearsals('elayone-main-choir');
+              setRehearsals(updatedEvents.map((event, index) => ({ ...event, color: rehearsalColors[index % rehearsalColors.length] })));
+            } catch (error) {
+              throw error;
+            }
+          }} /> : activeTab === 'Reports' ? <AttendanceReportScreen canManage={isAdmin} /> : activeTab === 'Admin' ? <AdminPanel announcements={announcements} onAnnouncementPublished={(nextAnnouncement) => { setAnnouncements((current) => [{ ...nextAnnouncement, authorName: nextAnnouncement.authorName ?? session?.user.name ?? 'Admin' }, ...current]); setHasNewAnnouncements(true); }} onAnnouncementDeleted={(id) => { setAnnouncements((current) => {
             const next = current.filter((announcement) => announcement.id !== id);
             setHasNewAnnouncements(next.length > 0);
             return next;
@@ -302,8 +310,8 @@ export default function App() {
           )}
         </ScrollView>
         <View style={styles.bottomNav}>
-          {(['Home', 'Rehearsals', 'People', 'Songs', 'Reports', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
-            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Rehearsals' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : tab === 'Reports' ? 'stats-chart-outline' : 'shield-checkmark-outline';
+          {(['Home', 'Calendar', 'People', 'Songs', 'Reports', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
+            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Calendar' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : tab === 'Reports' ? 'stats-chart-outline' : 'shield-checkmark-outline';
             const active = activeTab === tab;
             return <TouchableOpacity key={tab} style={styles.navItem} onPress={() => setActiveTab(tab)}><View style={[styles.navIconWrap, active && styles.navIconActive]}><Ionicons name={icon} size={21} color={active ? COLORS.white : COLORS.muted} /></View><Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text></TouchableOpacity>;
           })}
@@ -482,6 +490,109 @@ function ReportEmpty({ text }: { text: string }) {
   return <View style={styles.reportEmpty}><Ionicons name="bar-chart-outline" size={22} color={COLORS.muted} /><Text style={styles.reportEmptyText}>{text}</Text></View>;
 }
 
+function CalendarScreen({ events, canManage, onRespond }: { events: Rehearsal[]; canManage: boolean; onRespond: (eventId: string, status: 'YES' | 'MAYBE' | 'NO') => Promise<void> }) {
+  const [viewDate, setViewDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [selectedDay, setSelectedDay] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
+  const [busyEventId, setBusyEventId] = useState<string | null>(null);
+  const [localResponses, setLocalResponses] = useState<Record<string, 'YES' | 'MAYBE' | 'NO'>>({});
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const calendarCells = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, index) => index + 1)];
+  const isSameDay = (dateString: string, day: Date) => {
+    const date = new Date(dateString);
+    return date.getFullYear() === day.getFullYear() && date.getMonth() === day.getMonth() && date.getDate() === day.getDate();
+  };
+  const monthEvents = events.filter((event) => {
+    const date = new Date(event.startsAt);
+    return date.getFullYear() === year && date.getMonth() === month;
+  });
+  const dayEvents = monthEvents.filter((event) => isSameDay(event.startsAt, selectedDay));
+  const upcomingEvents = events.filter((event) => new Date(event.endsAt).getTime() >= Date.now());
+
+  async function saveResponse(eventId: string, status: 'YES' | 'MAYBE' | 'NO') {
+    setBusyEventId(eventId);
+    try {
+      await onRespond(eventId, status);
+      setLocalResponses((current) => ({ ...current, [eventId]: status }));
+    } catch (error) {
+      Alert.alert('Response not saved', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setBusyEventId(null);
+    }
+  }
+
+  function shiftMonth(offset: number) {
+    const next = new Date(year, month + offset, 1);
+    setViewDate(next);
+    setSelectedDay(new Date(next.getFullYear(), next.getMonth(), 1));
+  }
+
+  return <View>
+    <Text style={styles.pageEyebrow}>ELAYONE / SCHEDULE</Text>
+    <Text style={styles.pageTitle}>Choir calendar</Text>
+    <Text style={styles.pageCaption}>{canManage ? 'View scheduled events and track invite responses.' : 'Your invitations, schedule, and availability in one place.'}</Text>
+
+    <View style={styles.calendarCard}>
+      <View style={styles.calendarMonthHeader}>
+        <TouchableOpacity style={styles.calendarArrow} onPress={() => shiftMonth(-1)} accessibilityLabel="Previous month"><Ionicons name="chevron-back" size={19} color={COLORS.ink} /></TouchableOpacity>
+        <Text style={styles.calendarMonthTitle}>{viewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
+        <TouchableOpacity style={styles.calendarArrow} onPress={() => shiftMonth(1)} accessibilityLabel="Next month"><Ionicons name="chevron-forward" size={19} color={COLORS.ink} /></TouchableOpacity>
+      </View>
+      <View style={styles.calendarGrid}>
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => <Text key={`${label}-${index}`} style={styles.calendarWeekday}>{label}</Text>)}
+        {calendarCells.map((day, index) => {
+          if (day === null) return <View key={`blank-${index}`} style={styles.calendarDayCell} />;
+          const cellDate = new Date(year, month, day);
+          const hasEvent = monthEvents.some((event) => isSameDay(event.startsAt, cellDate));
+          const selected = isSameDay(selectedDay.toISOString(), cellDate);
+          const today = isSameDay(new Date().toISOString(), cellDate);
+          return <TouchableOpacity key={day} style={[styles.calendarDayCell, selected && styles.calendarDaySelected]} onPress={() => setSelectedDay(cellDate)}>
+            <Text style={[styles.calendarDayText, selected && styles.calendarDayTextSelected, today && !selected && styles.calendarDayToday]}>{day}</Text>
+            {hasEvent && <View style={[styles.calendarEventDot, selected && styles.calendarEventDotSelected]} />}
+          </TouchableOpacity>;
+        })}
+      </View>
+      <View style={styles.calendarKey}><View style={styles.calendarEventDot} /><Text style={styles.calendarKeyText}>{monthEvents.length} event{monthEvents.length === 1 ? '' : 's'} this month</Text></View>
+    </View>
+
+    <View style={styles.calendarListHeader}><Text style={styles.reportSectionTitle}>{selectedDay.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</Text><Text style={styles.reportSectionMeta}>{dayEvents.length} events</Text></View>
+    {dayEvents.length === 0 ? <ReportEmpty text="Nothing scheduled for this day. Tap a marked date to view its events." /> : dayEvents.map((event) => <CalendarEventCard key={event.id} event={event} canManage={canManage} response={localResponses[event.id] ?? event.myStatus ?? 'PENDING'} busy={busyEventId === event.id} onRespond={(status) => saveResponse(event.id, status)} />)}
+
+    <View style={styles.calendarListHeader}><Text style={styles.reportSectionTitle}>Upcoming invitations</Text><Text style={styles.reportSectionMeta}>{upcomingEvents.length}</Text></View>
+    {upcomingEvents.length === 0 ? <ReportEmpty text="No upcoming events have been scheduled." /> : upcomingEvents.slice(0, 12).map((event) => <CalendarEventCard key={`upcoming-${event.id}`} event={event} canManage={canManage} response={localResponses[event.id] ?? event.myStatus ?? 'PENDING'} busy={busyEventId === event.id} onRespond={(status) => saveResponse(event.id, status)} />)}
+  </View>;
+}
+
+function CalendarEventCard({ event, canManage, response, busy, onRespond }: { event: Rehearsal; canManage: boolean; response: AttendanceResponseStatus; busy: boolean; onRespond: (status: 'YES' | 'MAYBE' | 'NO') => void }) {
+  const labels: Record<AttendanceResponseStatus, string> = { YES: 'Accepted', MAYBE: 'Maybe', NO: 'Declined', PENDING: event.invitationOnly ? 'Awaiting reply' : 'Not responded' };
+  const responseStyle = response === 'YES' ? styles.reportPillYes : response === 'MAYBE' ? styles.reportPillMaybe : response === 'NO' ? styles.reportPillNo : styles.reportPillPending;
+  const canRespond = !canManage && event.invited !== false && new Date(event.endsAt).getTime() >= Date.now();
+  return <View style={styles.calendarEventCard}>
+    <View style={styles.calendarEventCardTop}>
+      <View style={[styles.calendarDateBadge, { backgroundColor: event.color }]}><Text style={styles.calendarDateDay}>{new Date(event.startsAt).toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</Text><Text style={styles.calendarDateNumber}>{new Date(event.startsAt).getDate()}</Text><Text style={styles.calendarDateMonth}>{new Date(event.startsAt).toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</Text></View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.calendarEventTitle}>{event.title}</Text>
+        <Text style={styles.calendarEventMeta}>{new Date(event.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–{new Date(event.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {event.location}</Text>
+        <Text style={styles.calendarEventType}>{(event.eventType ?? 'REHEARSAL').replace('_', ' ')}{event.invitationOnly ? ' · PERSONAL INVITE' : ' · WHOLE CHOIR'}</Text>
+      </View>
+      <View style={[styles.reportPill, responseStyle]}><Text style={styles.reportPillText}>{labels[response]}</Text></View>
+    </View>
+    {canManage ? <>
+      <View style={styles.calendarAdminSummary}><Ionicons name="people-outline" size={15} color={COLORS.muted} /><Text style={styles.calendarAdminSummaryText}>{event.invitees ? `${event.invitees.filter((member) => member.status === 'YES').length} accepted · ${event.invitees.filter((member) => member.status === 'NO').length} declined · ${event.invitees.filter((member) => member.status === 'PENDING' || member.status === 'MAYBE').length} awaiting` : `${event.confirmedCount ?? 0} accepted`}</Text></View>
+      {event.invitees && event.invitees.length > 0 && <View style={styles.calendarInviteeList}>{event.invitees.map((member) => <View key={member.userId} style={styles.calendarInviteeRow}><Text style={styles.calendarInviteeName}>{member.name}</Text><Text style={[styles.calendarInviteeStatus, member.status === 'YES' ? styles.reportAvailableText : member.status === 'NO' ? styles.reportUnavailableText : styles.reportPendingText]}>{labels[member.status]}</Text></View>)}</View>}
+    </> : canRespond ? <>
+      <Text style={styles.calendarPrompt}>{event.invitationOnly ? 'You have been invited. Please respond:' : 'Let the choir know your availability:'}</Text>
+      <View style={styles.calendarResponseButtons}>
+        {(['YES', 'MAYBE', 'NO'] as const).map((status) => <TouchableOpacity key={status} disabled={busy} style={[styles.calendarResponseButton, response === status && styles.calendarResponseButtonActive]} onPress={() => onRespond(status)}>
+          {busy && response === status ? <ActivityIndicator size="small" color={COLORS.ink} /> : <Text style={[styles.calendarResponseText, response === status && styles.calendarResponseTextActive]}>{status === 'YES' ? 'Accept' : status === 'MAYBE' ? 'Maybe' : 'Decline'}</Text>}
+        </TouchableOpacity>)}
+      </View>
+    </> : null}
+  </View>;
+}
+
 function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, onSongAdded, onRehearsalAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; onSongAdded: (song: SongItem) => void; onRehearsalAdded: (rehearsal: Rehearsal) => void }) {
   const [eventTitle, setEventTitle] = useState('');
   const [eventLocation, setEventLocation] = useState('');
@@ -489,6 +600,8 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   const [eventStartTime, setEventStartTime] = useState('');
   const [eventEndTime, setEventEndTime] = useState('');
   const [eventType, setEventType] = useState<'SERVICE' | 'REHEARSAL' | 'WORSHIP_NIGHT' | 'SPECIAL_EVENT'>('REHEARSAL');
+  const [inviteMode, setInviteMode] = useState<'ALL' | 'SELECTED'>('ALL');
+  const [selectedInviteeIds, setSelectedInviteeIds] = useState<string[]>([]);
   const [newsTitle, setNewsTitle] = useState('');
   const [newsMessage, setNewsMessage] = useState('');
   const [songTitle, setSongTitle] = useState('');
@@ -502,6 +615,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const choirId = 'elayone-main-choir';
+  const choirMembers = users.filter((user) => user.memberships.some((membership) => membership.choirId === choirId));
 
   React.useEffect(() => {
     getAllUsers().then(setUsers).catch(() => undefined).finally(() => setUsersLoading(false));
@@ -511,21 +625,34 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
     if (!eventTitle || !eventLocation || !eventDate || !eventStartTime || !eventEndTime) {
       return Alert.alert('Missing rehearsal details', 'Add the title, date, start time, end time, and location before saving.');
     }
-    const startsAt = new Date(`${eventDate}T${eventStartTime}:00`).toISOString();
-    const endsAt = new Date(`${eventDate}T${eventEndTime}:00`).toISOString();
-    if (Number.isNaN(new Date(startsAt).getTime()) || Number.isNaN(new Date(endsAt).getTime())) {
-      return Alert.alert('Invalid schedule', 'Use a valid date and time format for the rehearsal.');
+    const startDate = new Date(`${eventDate}T${eventStartTime}:00`);
+    const endDate = new Date(`${eventDate}T${eventEndTime}:00`);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+      return Alert.alert('Invalid schedule', 'Enter a valid date and time, and make sure the end time is after the start time.');
+    }
+    if (inviteMode === 'SELECTED' && selectedInviteeIds.length === 0) {
+      return Alert.alert('Choose invitees', 'Select at least one choir member, or choose the whole choir.');
     }
     setBusy(true);
     try {
-      const created = (await createRehearsal(choirId, { title: eventTitle.trim(), location: eventLocation.trim(), startsAt, endsAt, eventType })) as Rehearsal;
-      onRehearsalAdded(created);
+      const created = await createRehearsal(choirId, {
+        title: eventTitle.trim(),
+        location: eventLocation.trim(),
+        startsAt: startDate.toISOString(),
+        endsAt: endDate.toISOString(),
+        eventType,
+        inviteeIds: inviteMode === 'SELECTED' ? selectedInviteeIds : undefined,
+      });
+      const nextRehearsal: Rehearsal = { ...created, color: rehearsalColors[0] };
+      onRehearsalAdded(nextRehearsal);
       setEventTitle('');
       setEventLocation('');
       setEventDate('');
       setEventStartTime('');
       setEventEndTime('');
       setEventType('REHEARSAL');
+      setInviteMode('ALL');
+      setSelectedInviteeIds([]);
       setNotice({ type: 'success', text: 'Event added successfully and is now visible to the choir.' });
       Alert.alert('Event added', 'The choir can now see this schedule item.');
     } catch (error) {
@@ -707,8 +834,28 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
             </TouchableOpacity>
           ))}
         </View>
+        <Text style={[styles.fieldLabel, { marginTop: 5, marginBottom: 8 }]}>WHO SHOULD RECEIVE THIS EVENT?</Text>
+        <View style={styles.priorityRow}>
+          {([{ id: 'ALL', label: 'Whole choir' }, { id: 'SELECTED', label: 'Choose members' }] as const).map((option) => (
+            <TouchableOpacity key={option.id} style={[styles.priorityOption, inviteMode === option.id && styles.priorityOptionActive]} onPress={() => setInviteMode(option.id)}>
+              <Text style={[styles.priorityText, inviteMode === option.id && styles.priorityTextActive]}>{option.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {inviteMode === 'SELECTED' && (
+          <View style={styles.inviteePicker}>
+            <Text style={styles.inviteePickerCaption}>{selectedInviteeIds.length} selected · only selected members will see and respond to this invitation</Text>
+            {usersLoading ? <ActivityIndicator color={COLORS.ink} /> : choirMembers.length === 0 ? <Text style={styles.adminHelp}>No choir members are available to invite yet.</Text> : choirMembers.map((member) => {
+              const selected = selectedInviteeIds.includes(member.id);
+              return <TouchableOpacity key={member.id} style={styles.inviteeRow} onPress={() => setSelectedInviteeIds((current) => selected ? current.filter((id) => id !== member.id) : [...current, member.id])} accessibilityRole="checkbox" accessibilityState={{ checked: selected }}>
+                <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={20} color={selected ? COLORS.olive : COLORS.muted} />
+                <View style={{ flex: 1 }}><Text style={styles.inviteeName}>{member.name}</Text><Text style={styles.inviteeMeta}>{member.memberships.find((membership) => membership.choirId === choirId)?.vocalPart ?? 'Choir member'} · {member.email}</Text></View>
+              </TouchableOpacity>;
+            })}
+          </View>
+        )}
         <TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}>
-          <Text style={styles.adminButtonText}>{busy ? 'Saving...' : 'Add event'}</Text>
+          <Text style={styles.adminButtonText}>{busy ? 'Saving...' : inviteMode === 'SELECTED' ? 'Schedule and invite' : 'Add event for choir'}</Text>
         </TouchableOpacity>
       </AdminForm>
 
@@ -1122,6 +1269,48 @@ const styles = StyleSheet.create({
   reportRetry: { color: COLORS.ink, fontSize: 11, fontWeight: '800', marginTop: 9 },
   reportEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 22, marginBottom: 12 },
   reportEmptyText: { color: COLORS.muted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 9 },
+  inviteePicker: { backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 13 },
+  inviteePickerCaption: { color: COLORS.muted, fontSize: 9, lineHeight: 14, marginBottom: 6 },
+  inviteeRow: { flexDirection: 'row', alignItems: 'center', gap: 9, borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 9 },
+  inviteeName: { color: COLORS.ink, fontSize: 11, fontWeight: '700' },
+  inviteeMeta: { color: COLORS.muted, fontSize: 9, marginTop: 3 },
+  calendarCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 5, padding: 14, marginBottom: 24 },
+  calendarMonthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  calendarArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
+  calendarMonthTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 19 },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarWeekday: { width: `${100 / 7}%`, textAlign: 'center', color: COLORS.muted, fontSize: 9, fontWeight: '800', paddingVertical: 8 },
+  calendarDayCell: { width: `${100 / 7}%`, height: 41, alignItems: 'center', justifyContent: 'center', position: 'relative', borderRadius: 20 },
+  calendarDaySelected: { backgroundColor: COLORS.ink },
+  calendarDayText: { color: COLORS.ink, fontSize: 11, fontWeight: '600' },
+  calendarDayTextSelected: { color: COLORS.white },
+  calendarDayToday: { color: COLORS.clay, fontWeight: '900' },
+  calendarEventDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginTop: 2 },
+  calendarEventDotSelected: { backgroundColor: COLORS.white },
+  calendarKey: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 1, borderTopColor: COLORS.line, paddingTop: 10, marginTop: 7 },
+  calendarKeyText: { color: COLORS.muted, fontSize: 9 },
+  calendarListHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, marginTop: 2 },
+  calendarEventCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 12, marginBottom: 9 },
+  calendarEventCardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  calendarDateBadge: { width: 45, height: 54, borderRadius: 3, alignItems: 'center', justifyContent: 'center' },
+  calendarDateDay: { color: COLORS.white, fontSize: 7, fontWeight: '800' },
+  calendarDateNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 21, lineHeight: 22 },
+  calendarDateMonth: { color: COLORS.white, fontSize: 7, fontWeight: '800' },
+  calendarEventTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 },
+  calendarEventMeta: { color: COLORS.muted, fontSize: 9, lineHeight: 14, marginTop: 3 },
+  calendarEventType: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.4, marginTop: 4 },
+  calendarPrompt: { color: COLORS.muted, fontSize: 10, marginTop: 12 },
+  calendarResponseButtons: { flexDirection: 'row', gap: 7, marginTop: 8 },
+  calendarResponseButton: { flex: 1, minHeight: 34, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.paper },
+  calendarResponseButtonActive: { backgroundColor: '#edf2ec', borderColor: COLORS.olive },
+  calendarResponseText: { color: COLORS.muted, fontSize: 10, fontWeight: '800' },
+  calendarResponseTextActive: { color: COLORS.ink },
+  calendarAdminSummary: { flexDirection: 'row', alignItems: 'center', gap: 6, borderTopWidth: 1, borderTopColor: COLORS.line, paddingTop: 10, marginTop: 10 },
+  calendarAdminSummaryText: { color: COLORS.muted, fontSize: 9, fontWeight: '700' },
+  calendarInviteeList: { marginTop: 4 },
+  calendarInviteeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 8 },
+  calendarInviteeName: { color: COLORS.ink, fontSize: 10, fontWeight: '700' },
+  calendarInviteeStatus: { fontSize: 8, fontWeight: '800' },
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.paper },
   authSafeArea: { flex: 1, backgroundColor: '#f4efe8' },
   authShell: { flex: 1, justifyContent: 'center' },
