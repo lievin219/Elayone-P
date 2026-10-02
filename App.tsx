@@ -1195,8 +1195,8 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
           }} accessibilityLabel={`Delete ${song.title}`}><Ionicons name="trash-outline" size={17} color={COLORS.clay} /></TouchableOpacity>}
         </View>)}
         <Text style={styles.adminFormSubheading}>Add a new song</Text>
-        <Field label="SONG TITLE" value={songTitle} onChangeText={setSongTitle} placeholder="I will praise you" />
-        <Field label="KEY" value={songKey} onChangeText={setSongKey} placeholder="Key of G" />
+        <Field label="SONG TITLE" value={songTitle} onChangeText={setSongTitle} placeholder="Elayone Music only" />
+        <Field label="KEY" value={songKey} onChangeText={setSongKey} placeholder="Praise or Worship" />
         <TouchableOpacity style={styles.uploadButton} onPress={async () => {
           const result = await DocumentPicker.getDocumentAsync({ type: ['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'], copyToCacheDirectory: true, multiple: false });
           if (!result.canceled && result.assets[0]) {

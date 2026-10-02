@@ -2473,3 +2473,4 @@
 {"_e":"metro:client_log","_t":1790952951985,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
 {"_e":"metro:client_log","_t":1790952952001,"level":"warn","data":["\"shadow*\" style props are deprecated. Use \"boxShadow\"."]}
 {"_e":"metro:client_log","_t":1790952952054,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
+{"_e":"metro:client_log","_t":1790953117969,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
