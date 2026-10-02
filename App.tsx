@@ -13,6 +13,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,15 @@ type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' |
 
 type Rehearsal = RehearsalRecord & { color: string };
 type PersonItem = { id: string; name: string; role: string; initials: string; tone: string; part: string; availability: 'YES' | 'MAYBE' | 'NO' | 'PENDING' };
+
+const responseLabels: Record<AttendanceResponseStatus, string> = { YES: 'Available · YES', MAYBE: 'Maybe', NO: 'Unavailable · NO', PENDING: 'No response yet' };
+
+function responseDescription(status: AttendanceResponseStatus, personal = true) {
+  if (status === 'YES') return personal ? 'You selected YES: you are available.' : 'Selected YES: available.';
+  if (status === 'MAYBE') return personal ? 'You selected Maybe: you are unsure.' : 'Selected Maybe: member is unsure.';
+  if (status === 'NO') return personal ? 'You selected NO: you are unavailable.' : 'Selected NO: unavailable.';
+  return personal ? 'No response yet: choose an option when you know.' : 'No response yet: member has not chosen.';
+}
 
 function formatRehearsalDate(input: string) {
   const date = new Date(input);
@@ -78,12 +88,14 @@ const seedSongs: SongItem[] = [
 ];
 
 export default function App() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 900;
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('Home');
   const [selectedRehearsal, setSelectedRehearsal] = useState<string>('');
   const [checkedIn, setCheckedIn] = useState(false);
-  const [visiblePeople, setVisiblePeople] = useState<PersonItem[]>(people);
+  const [visiblePeople, setVisiblePeople] = useState<PersonItem[]>([]);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
   const [rehearsals, setRehearsals] = useState<Rehearsal[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -255,8 +267,8 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" />
-      <View style={styles.appShell}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <View style={[styles.appShell, isDesktop && styles.desktopAppShell]}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, isDesktop && styles.desktopScrollContent]} showsVerticalScrollIndicator={false}>
           <View style={styles.topBar}>
             <View style={styles.brandMark}>
               <Image source={require('./elayone.jpg')} style={styles.brandLogo} resizeMode="cover" />
@@ -301,7 +313,7 @@ export default function App() {
                   <View style={styles.avatarStack}>
                     {['A', 'D', 'G', '+'].map((letter, index) => <View key={letter} style={[styles.avatar, { marginLeft: index === 0 ? 0 : -7, backgroundColor: index === 3 ? COLORS.ink : ['#d7c5af', '#b9c2b0', '#d9b7b0'][index] }]}><Text style={[styles.avatarText, index === 3 && { color: COLORS.white }]}>{letter}</Text></View>)}
                   </View>
-                  <Text style={styles.attendanceText}>{attendanceSummary.confirmed} confirmed attendance</Text>
+                  <Text style={styles.attendanceText}>{attendanceSummary.confirmed} selected YES for this event</Text>
                   <TouchableOpacity style={styles.checkInButton} onPress={() => setCheckedIn(!checkedIn)}>
                     <Text style={styles.checkInText}>{checkedIn ? 'Checked in' : 'Check in'}</Text>
                     <Ionicons name={checkedIn ? 'checkmark' : 'arrow-forward'} size={15} color={COLORS.white} />
@@ -350,11 +362,11 @@ export default function App() {
             <TabView tab={activeTab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onOpenCalendar={() => setActiveTab('Calendar')} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
-        <View style={styles.bottomNav}>
+        <View style={[styles.bottomNav, isDesktop && styles.desktopNav]}>
           {(['Home', 'Calendar', 'People', 'Songs', 'Reports', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
             const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Calendar' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : tab === 'Reports' ? 'stats-chart-outline' : 'shield-checkmark-outline';
             const active = activeTab === tab;
-            return <TouchableOpacity key={tab} style={styles.navItem} onPress={() => setActiveTab(tab)}><View style={[styles.navIconWrap, active && styles.navIconActive]}><Ionicons name={icon} size={21} color={active ? COLORS.white : COLORS.muted} /></View><Text style={[styles.navLabel, active && styles.navLabelActive]}>{tab}</Text></TouchableOpacity>;
+            return <TouchableOpacity key={tab} style={[styles.navItem, isDesktop && styles.desktopNavItem]} onPress={() => setActiveTab(tab)}><View style={[styles.navIconWrap, active && styles.navIconActive]}><Ionicons name={icon} size={21} color={active ? COLORS.white : COLORS.muted} /></View><Text style={[styles.navLabel, isDesktop && styles.desktopNavLabel, active && styles.navLabelActive]}>{tab}</Text></TouchableOpacity>;
           })}
         </View>
       </View>
@@ -403,7 +415,7 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
           <Ionicons name="refresh-outline" size={19} color={COLORS.ink} />
         </TouchableOpacity>
       </View>
-      <Text style={styles.pageCaption}>{canManage ? 'See availability and response history across the whole choir.' : 'Review your responses and how consistently you have replied.'}</Text>
+      <Text style={styles.pageCaption}>{canManage ? 'See how members answered each event and who still needs to reply.' : 'Review your own event choices and response history.'}</Text>
 
       {loading ? <View style={styles.reportLoading}><ActivityIndicator color={COLORS.ink} /><Text style={styles.reportHint}>Loading attendance report…</Text></View> : error ? (
         <View style={styles.reportError}><Text style={styles.reportErrorText}>{error}</Text><TouchableOpacity onPress={() => setReloadKey((current) => current + 1)}><Text style={styles.reportRetry}>Try again</Text></TouchableOpacity></View>
@@ -411,7 +423,7 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
         <>
           <View style={styles.reportNotice}>
             <Ionicons name="information-circle-outline" size={17} color={COLORS.olive} />
-            <Text style={styles.reportNoticeText}>These are availability responses: “Available” means the member selected YES. No response is shown separately from “Unavailable.”</Text>
+            <Text style={styles.reportNoticeText}>{canManage ? 'These are member responses. Available means a member selected YES, Maybe means they are unsure, Unavailable means they selected NO, and No response means they have not chosen yet.' : 'These are your event responses. Available means you selected YES, Maybe means you are unsure, Unavailable means you selected NO, and No response means you have not chosen yet.'}</Text>
           </View>
 
           {canManage && <View style={styles.reportMetricGrid}>
@@ -432,7 +444,7 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
 
           <View style={styles.reportCard}>
             <View style={styles.reportCardHeader}>
-              <View><Text style={styles.reportCardTitle}>{canManage ? 'Choir availability' : 'Your responses'}</Text><Text style={styles.reportCardCaption}>{summary.total} member/event responses</Text></View>
+              <View><Text style={styles.reportCardTitle}>{canManage ? 'Member responses' : 'Your responses'}</Text><Text style={styles.reportCardCaption}>{canManage ? `${summary.total} member/event responses` : `${summary.total} of your event responses`}</Text></View>
               <Text style={styles.reportRate}>{summary.responseRate}%</Text>
             </View>
             {statusCounts && <StatusDistribution counts={statusCounts} />}
@@ -454,7 +466,7 @@ function AttendanceReportScreen({ canManage }: { canManage: boolean }) {
                     <Text style={styles.reportEventType}>{event.eventType.replace('_', ' ')}</Text>
                   </View>
                   <StatusDistribution counts={{ YES: event.totals.yes, MAYBE: event.totals.maybe, NO: event.totals.no, PENDING: event.totals.pending }} />
-                  <View style={styles.reportEventCounts}><Text style={styles.reportAvailableText}>{event.totals.yes} available</Text><Text style={styles.reportMaybeText}>{event.totals.maybe} maybe</Text><Text style={styles.reportUnavailableText}>{event.totals.no} unavailable</Text><Text style={styles.reportPendingText}>{event.totals.pending} no reply</Text></View>
+                  <View style={styles.reportEventCounts}><Text style={styles.reportAvailableText}>{event.totals.yes} selected YES</Text><Text style={styles.reportMaybeText}>{event.totals.maybe} selected Maybe</Text><Text style={styles.reportUnavailableText}>{event.totals.no} selected NO</Text><Text style={styles.reportPendingText}>{event.totals.pending} no response</Text></View>
                 </View>
               ))}
 
@@ -519,11 +531,10 @@ function ReportLegend({ color, label }: { color: string; label: string }) {
 }
 
 function ReportHistoryRow({ title, date, location, status }: { title: string; date: string; location: string; status: AttendanceResponseStatus }) {
-  const labels: Record<AttendanceResponseStatus, string> = { YES: 'Available', MAYBE: 'Maybe', NO: 'Unavailable', PENDING: 'No response' };
   const pillStyle = status === 'YES' ? styles.reportPillYes : status === 'MAYBE' ? styles.reportPillMaybe : status === 'NO' ? styles.reportPillNo : styles.reportPillPending;
   return <View style={styles.reportHistoryRow}>
     <View style={{ flex: 1 }}><Text style={styles.reportEventTitle}>{title}</Text><Text style={styles.reportEventMeta}>{new Date(date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · {location}</Text></View>
-    <View style={[styles.reportPill, pillStyle]}><Text style={styles.reportPillText}>{labels[status]}</Text></View>
+    <View style={[styles.reportPill, pillStyle]}><Text style={styles.reportPillText}>{responseLabels[status]}</Text></View>
   </View>;
 }
 
@@ -596,7 +607,7 @@ function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespon
     try {
       await onRespond(eventId, status);
       setLocalResponses((current) => ({ ...current, [eventId]: status }));
-      setResponseNotice({ type: 'success', message: `Your response was saved: ${status === 'YES' ? 'you accepted' : status === 'MAYBE' ? 'you marked maybe' : 'you declined'} this event.` });
+      setResponseNotice({ type: 'success', message: `${responseDescription(status)} Your response was saved for this event.` });
     } catch (error) {
       setResponseNotice({ type: 'error', message: error instanceof Error ? error.message : 'We could not save your response. Please try again.' });
     } finally {
@@ -722,7 +733,6 @@ function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespon
 }
 
 function CalendarEventCard({ event, canManage, response, busy, onRespond }: { event: Rehearsal; canManage: boolean; response: AttendanceResponseStatus; busy: boolean; onRespond: (status: 'YES' | 'MAYBE' | 'NO') => void }) {
-  const labels: Record<AttendanceResponseStatus, string> = { YES: 'Accepted', MAYBE: 'Maybe', NO: 'Declined', PENDING: event.invitationOnly ? 'Awaiting reply' : 'Not responded' };
   const responseStyle = response === 'YES' ? styles.reportPillYes : response === 'MAYBE' ? styles.reportPillMaybe : response === 'NO' ? styles.reportPillNo : styles.reportPillPending;
   const canRespond = !canManage && event.invited !== false && new Date(event.endsAt).getTime() >= Date.now();
   return <View style={styles.calendarEventCard}>
@@ -733,16 +743,16 @@ function CalendarEventCard({ event, canManage, response, busy, onRespond }: { ev
         <Text style={styles.calendarEventMeta}>{new Date(event.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–{new Date(event.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {event.location}</Text>
         <Text style={styles.calendarEventType}>{(event.eventTypeName ?? event.eventType ?? 'REHEARSAL').replace('_', ' ')}{event.invitationOnly ? ' · PERSONAL INVITE' : ' · WHOLE CHOIR'}</Text>
       </View>
-      <View style={[styles.reportPill, responseStyle]}><Text style={styles.reportPillText}>{labels[response]}</Text></View>
+      <View style={[styles.reportPill, responseStyle]}><Text style={styles.reportPillText}>{response === 'PENDING' && event.invitationOnly ? 'Awaiting response' : responseLabels[response]}</Text></View>
     </View>
     {canManage ? <>
       <View style={styles.calendarAdminSummary}><Ionicons name="people-outline" size={15} color={COLORS.muted} /><Text style={styles.calendarAdminSummaryText}>{event.invitees ? `${event.invitees.filter((member) => member.status === 'YES').length} accepted · ${event.invitees.filter((member) => member.status === 'NO').length} declined · ${event.invitees.filter((member) => member.status === 'PENDING' || member.status === 'MAYBE').length} awaiting` : `${event.confirmedCount ?? 0} accepted`}</Text></View>
-      {event.invitees && event.invitees.length > 0 && <View style={styles.calendarInviteeList}>{event.invitees.map((member) => <View key={member.userId} style={styles.calendarInviteeRow}><Text style={styles.calendarInviteeName}>{member.name}</Text><Text style={[styles.calendarInviteeStatus, member.status === 'YES' ? styles.reportAvailableText : member.status === 'NO' ? styles.reportUnavailableText : styles.reportPendingText]}>{labels[member.status]}</Text></View>)}</View>}
+      {event.invitees && event.invitees.length > 0 && <View style={styles.calendarInviteeList}>{event.invitees.map((member) => <View key={member.userId} style={styles.calendarInviteeRow}><Text style={styles.calendarInviteeName}>{member.name}</Text><Text style={[styles.calendarInviteeStatus, member.status === 'YES' ? styles.reportAvailableText : member.status === 'NO' ? styles.reportUnavailableText : styles.reportPendingText]}>{responseLabels[member.status]}</Text></View>)}</View>}
     </> : canRespond ? <>
-      <Text style={styles.calendarPrompt}>{event.invitationOnly ? 'You have been invited. Please respond:' : 'Let the choir know your availability:'}</Text>
+      <Text style={styles.calendarPrompt}>{event.invitationOnly ? 'You have been invited. Choose the response that matches your availability:' : 'Choose your availability for this event:'}</Text>
       <View style={styles.calendarResponseButtons}>
         {(['YES', 'MAYBE', 'NO'] as const).map((status) => <TouchableOpacity key={status} disabled={busy} style={[styles.calendarResponseButton, response === status && styles.calendarResponseButtonActive]} onPress={() => onRespond(status)}>
-          {busy && response === status ? <ActivityIndicator size="small" color={COLORS.ink} /> : <Text style={[styles.calendarResponseText, response === status && styles.calendarResponseTextActive]}>{status === 'YES' ? 'Accept' : status === 'MAYBE' ? 'Maybe' : 'Decline'}</Text>}
+          {busy && response === status ? <ActivityIndicator size="small" color={COLORS.ink} /> : <Text style={[styles.calendarResponseText, response === status && styles.calendarResponseTextActive]}>{status === 'YES' ? 'I am available' : status === 'MAYBE' ? 'I am unsure' : 'I am unavailable'}</Text>}
         </TouchableOpacity>)}
       </View>
     </> : null}
@@ -1240,6 +1250,8 @@ function AdminForm({ title, icon, children }: { title: string; icon: IconName; c
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 900;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -1258,11 +1270,20 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
     }
   }
 
-  return <SafeAreaView style={styles.authSafeArea}>
+  return <SafeAreaView style={[styles.authSafeArea, isDesktop && styles.authDesktopSafeArea]}>
     <StatusBar barStyle="dark-content" />
     <KeyboardAvoidingView style={styles.authShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.authContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.authCard}>
+      <ScrollView contentContainerStyle={[styles.authContent, isDesktop && styles.authDesktopContent]} keyboardShouldPersistTaps="handled">
+        {isDesktop && <View style={styles.authFeaturePanel}>
+          <Image source={require('./elayone.jpg')} style={styles.authFeatureImage} resizeMode="cover" />
+          <View style={styles.authFeatureOverlay} />
+          <View style={styles.authFeatureContent}>
+            <Text style={styles.authFeatureKicker}>ELAYONE MUSIC</Text>
+            <Text style={styles.authFeatureTitle}>One choir.{`\n`}One offering.</Text>
+            <Text style={styles.authFeatureBody}>Keep every rehearsal, response, song, and ministry moment moving in the same direction.</Text>
+          </View>
+        </View>}
+        <View style={[styles.authCard, isDesktop && styles.authDesktopCard]}>
           <Image source={require('./elayone.jpg')} style={styles.authBrandMark} accessibilityLabel="Elayone Music logo" />
           <Text style={styles.authBrand}>ELAYONE MUSIC</Text>
           <Text style={styles.authBrandSub}>GOSPEL MUSIC MINISTRY</Text>
@@ -1290,9 +1311,9 @@ function QuickAction({ icon, label, onPress }: { icon: IconName; label: string; 
   return <TouchableOpacity style={styles.quickAction} onPress={onPress}><View style={styles.quickIcon}><Ionicons name={icon} size={20} color={COLORS.ink} /></View><Text style={styles.quickLabel}>{label}</Text><Ionicons name="arrow-forward" size={15} color={COLORS.muted} /></TouchableOpacity>;
 }
 
-function TabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onOpenCalendar, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onOpenCalendar: () => void; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
+function TabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onOpenCalendar, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: PersonItem[]; canManage: boolean; onOpenCalendar: () => void; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
   const selected = rehearsals.find((rehearsal) => rehearsal.id === selectedRehearsal) ?? rehearsals[0] ?? null;
-  return <><BaseTabView tab={tab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onOpenCalendar={onOpenCalendar} onRemovePerson={onRemovePerson} songList={songList} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selected} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
+  return <><BaseTabView tab={tab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onOpenCalendar={onOpenCalendar} onRemovePerson={onRemovePerson} songList={songList} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selected} />}{tab === 'People' && <><AvailabilitySummary peopleList={peopleList} />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
 }
 
 function AttendanceRoster({ rehearsal }: { rehearsal: Rehearsal | null }) {
@@ -1305,24 +1326,28 @@ function AttendanceRoster({ rehearsal }: { rehearsal: Rehearsal | null }) {
   return <View style={styles.rosterSection}><View style={styles.rosterHeader}><View><Text style={styles.sectionTitle}>Who is coming?</Text><Text style={styles.sectionCaption}>{rehearsal.title}</Text></View><View style={styles.responseSummary}><Text style={styles.responseNumber}>{yesCount}</Text><Text style={styles.responseLabel}>YES</Text></View></View><View style={styles.responseBar}><View style={[styles.responseYes, { width: `${Math.max(8, (yesCount / Math.max(1, yesCount + maybeCount + noCount)) * 100)}%` }]} /><View style={[styles.responseMaybe, { width: `${Math.max(8, (maybeCount / Math.max(1, yesCount + maybeCount + noCount)) * 100)}%` }]} /><View style={[styles.responseNo, { width: `${Math.max(8, (noCount / Math.max(1, yesCount + maybeCount + noCount)) * 100)}%` }]} /></View><View style={styles.responseLegend}><Text style={styles.legendYes}>{yesCount} coming</Text><Text style={styles.legendMaybe}>{maybeCount} maybe</Text><Text style={styles.legendNo}>{noCount} away</Text></View>{attendanceRoster.map((person) => <View key={person.name} style={styles.rosterRow}><View style={[styles.rosterAvatar, { backgroundColor: person.tone }]}><Text style={styles.personInitials}>{person.name.split(' ').map((part) => part[0]).join('')}</Text></View><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part}</Text></View><Text style={[styles.rosterStatus, person.status === 'Coming' ? styles.statusComing : person.status === 'Maybe' ? styles.statusMaybe : styles.statusAway]}>{person.status}</Text></View>)}</View>;
 }
 
-function AvailabilitySummary() {
-  return <View style={styles.availabilityCard}><View><Text style={styles.cardEyebrow}>AVAILABILITY</Text><Text style={styles.availabilityTitle}>For the next rehearsal</Text></View><View style={styles.availabilityStats}><View><Text style={[styles.availabilityNumber, { color: COLORS.olive }]}>18</Text><Text style={styles.availabilityLabel}>COMING</Text></View><View><Text style={[styles.availabilityNumber, { color: COLORS.clay }]}>3</Text><Text style={styles.availabilityLabel}>MAYBE</Text></View><View><Text style={[styles.availabilityNumber, { color: COLORS.muted }]}>3</Text><Text style={styles.availabilityLabel}>AWAY</Text></View></View></View>;
+function AvailabilitySummary({ peopleList }: { peopleList: PersonItem[] }) {
+  const count = (availability: PersonItem['availability']) => peopleList.filter((person) => person.availability === availability).length;
+  return <View style={styles.availabilityCard}><View><Text style={styles.cardEyebrow}>AVAILABILITY</Text><Text style={styles.availabilityTitle}>Current member responses</Text></View><View style={styles.availabilityStats}><View><Text style={[styles.availabilityNumber, { color: COLORS.olive }]}>{count('YES')}</Text><Text style={styles.availabilityLabel}>SELECTED YES</Text></View><View><Text style={[styles.availabilityNumber, { color: '#9c7c43' }]}>{count('MAYBE')}</Text><Text style={styles.availabilityLabel}>SELECTED MAYBE</Text></View><View><Text style={[styles.availabilityNumber, { color: COLORS.clay }]}>{count('NO')}</Text><Text style={styles.availabilityLabel}>SELECTED NO</Text></View><View><Text style={[styles.availabilityNumber, { color: COLORS.muted }]}>{count('PENDING')}</Text><Text style={styles.availabilityLabel}>NO RESPONSE</Text></View></View></View>;
 }
 
-function AdminMemberList({ peopleList, onRemovePerson }: { peopleList: typeof people; onRemovePerson: (id: string) => void }) {
-  async function removePerson(person: (typeof people)[number]) {
+function AdminMemberList({ peopleList, onRemovePerson }: { peopleList: PersonItem[]; onRemovePerson: (id: string) => void }) {
+  async function removePerson(person: PersonItem) {
     Alert.alert('Remove member?', `${person.name} will lose access to this choir.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: async () => { try { await removeChoirMember('elayone-main-choir', person.id); onRemovePerson(person.id); } catch (error) { Alert.alert('Could not remove member', error instanceof Error ? error.message : 'Try again.'); } } }]);
   }
 
   return <View style={styles.adminMembers}><Text style={styles.adminMembersTitle}>MANAGE MEMBERS</Text>{peopleList.map((person) => <View key={person.id} style={styles.adminMemberRow}><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part} · {person.role}</Text></View><TouchableOpacity style={styles.removeIconButton} onPress={() => removePerson(person)} accessibilityLabel={`Remove ${person.name}`}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /></TouchableOpacity></View>)}</View>;
 }
 
-function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onOpenCalendar, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onOpenCalendar: () => void; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
+function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onOpenCalendar, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: PersonItem[]; canManage: boolean; onOpenCalendar: () => void; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
   const heading = tab === 'Rehearsals' ? 'Rehearsals' : tab === 'People' ? 'The choir' : 'Song library';
-  const caption = tab === 'Rehearsals' ? 'A prepared choir is a present choir.' : tab === 'People' ? '24 voices, one offering.' : 'Songs we carry together.';
+  const caption = tab === 'Rehearsals' ? 'A prepared choir is a present choir.' : tab === 'People' ? 'Real members, roles, and availability.' : 'Songs we carry together.';
   const [activeSong, setActiveSong] = useState<string | null>(null);
   const [isSongPlaying, setIsSongPlaying] = useState(false);
   const [songQuery, setSongQuery] = useState('');
+  const [peopleQuery, setPeopleQuery] = useState('');
+  const [availabilityFilter, setAvailabilityFilter] = useState<PersonItem['availability'] | 'ALL'>('ALL');
+  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null);
   const [attendanceChoice, setAttendanceChoice] = useState<Record<string, 'YES' | 'MAYBE' | 'NO'>>({});
   const soundRef = useRef<Audio.Sound | null>(null);
 
@@ -1372,6 +1397,10 @@ function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal,
     const q = songQuery.trim().toLowerCase();
     if (!q) return true;
     return `${song.title} ${song.key ?? ''} ${song.status}`.toLowerCase().includes(q);
+  });
+  const filteredPeople = peopleList.filter((person) => {
+    const query = peopleQuery.trim().toLowerCase();
+    return (!query || `${person.name} ${person.role} ${person.part}`.toLowerCase().includes(query)) && (availabilityFilter === 'ALL' || person.availability === availabilityFilter);
   });
 
   return (
@@ -1442,24 +1471,35 @@ function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal,
       {tab === 'People' && (
         <>
           <View style={styles.peopleSummary}>
-            <Text style={styles.peopleNumber}>24</Text>
+            <Text style={styles.peopleNumber}>{peopleList.length}</Text>
             <View>
               <Text style={styles.peopleTitle}>Active singers</Text>
-              <Text style={styles.peopleCaption}>4 section leaders · 3 vocal sections</Text>
+              <Text style={styles.peopleCaption}>{peopleList.filter((person) => person.role === 'Choir leader' || person.role === 'Administrator').length} leaders · {new Set(peopleList.map((person) => person.part).filter((part) => part !== 'Unassigned')).size} vocal sections</Text>
             </View>
           </View>
-          {people.map((person) => (
-            <View key={person.name} style={styles.personRow}>
-              <View style={[styles.personAvatar, { backgroundColor: person.tone }]}>
-                <Text style={styles.personInitials}>{person.initials}</Text>
-              </View>
-              <View style={styles.personInfo}>
-                <Text style={styles.personName}>{person.name}</Text>
-                <Text style={styles.personRole}>{person.role}</Text>
-              </View>
-              <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.muted} />
-            </View>
-          ))}
+          <View style={styles.peopleSearchWrap}><Ionicons name="search-outline" size={17} color={COLORS.muted} /><TextInput value={peopleQuery} onChangeText={setPeopleQuery} placeholder="Search members" placeholderTextColor={COLORS.muted} style={styles.peopleSearchInput} /></View>
+          <View style={styles.peopleFilterRow}>{(['ALL', 'YES', 'MAYBE', 'NO', 'PENDING'] as const).map((filter) => <TouchableOpacity key={filter} style={[styles.peopleFilter, availabilityFilter === filter && styles.peopleFilterActive]} onPress={() => setAvailabilityFilter(filter)}><Text style={[styles.peopleFilterText, availabilityFilter === filter && styles.peopleFilterTextActive]}>{filter === 'ALL' ? `All · ${peopleList.length}` : `${filter} · ${peopleList.filter((person) => person.availability === filter).length}`}</Text></TouchableOpacity>)}</View>
+          {filteredPeople.length === 0 ? <Text style={styles.adminHelp}>No choir members match this search or filter.</Text> : filteredPeople.map((person) => {
+            const expanded = expandedPersonId === person.id;
+            return <View key={person.id} style={styles.personProfileBlock}>
+              <TouchableOpacity style={styles.personRow} onPress={() => setExpandedPersonId(expanded ? null : person.id)} accessibilityRole="button" accessibilityLabel={`${expanded ? 'Hide' : 'View'} ${person.name} details`}>
+                <View style={[styles.personAvatar, { backgroundColor: person.tone }]}>
+                  <Text style={styles.personInitials}>{person.initials}</Text>
+                </View>
+                <View style={styles.personInfo}>
+                  <Text style={styles.personName}>{person.name}</Text>
+                  <Text style={styles.personRole}>{person.role} · {person.part}</Text>
+                </View>
+                <Text style={[styles.peopleAvailability, person.availability === 'YES' ? styles.legendYes : person.availability === 'NO' ? styles.legendNo : person.availability === 'MAYBE' ? styles.legendMaybe : styles.peoplePending]}>{person.availability === 'YES' ? 'Available' : person.availability === 'NO' ? 'Unavailable' : person.availability === 'MAYBE' ? 'Maybe' : 'No reply'}</Text>
+                <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={17} color={COLORS.muted} />
+              </TouchableOpacity>
+              {expanded && <View style={styles.personDetailPanel}>
+                <View style={styles.personDetailItem}><Text style={styles.personDetailLabel}>ROLE</Text><Text style={styles.personDetailValue}>{person.role}</Text></View>
+                <View style={styles.personDetailItem}><Text style={styles.personDetailLabel}>VOCAL PART</Text><Text style={styles.personDetailValue}>{person.part}</Text></View>
+                <View style={styles.personDetailItem}><Text style={styles.personDetailLabel}>AVAILABILITY</Text><Text style={styles.personDetailValue}>{person.availability === 'PENDING' ? 'No response yet' : person.availability}</Text></View>
+              </View>}
+            </View>;
+          })}
         </>
       )}
 
@@ -1515,6 +1555,20 @@ function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal,
 const COLORS = { ink: '#171717', muted: '#797975', line: '#e5e3de', paper: '#f7f7f5', white: '#ffffff', olive: '#708067', clay: '#a76e5b' };
 
 const styles = StyleSheet.create({
+    peopleSearchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, paddingHorizontal: 11, marginBottom: 10 },
+    peopleSearchInput: { flex: 1, height: 42, color: COLORS.ink, fontSize: 12 },
+    peopleFilterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 },
+    peopleFilter: { borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 7, backgroundColor: COLORS.white },
+    peopleFilterActive: { backgroundColor: COLORS.ink, borderColor: COLORS.ink },
+    peopleFilterText: { color: COLORS.muted, fontSize: 9, fontWeight: '800' },
+    peopleFilterTextActive: { color: COLORS.white },
+    peopleAvailability: { fontSize: 9, fontWeight: '800' },
+    peoplePending: { color: COLORS.muted },
+    personProfileBlock: { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.line },
+    personDetailPanel: { marginLeft: 54, marginRight: 12, marginBottom: 12, padding: 10, backgroundColor: COLORS.paper, borderRadius: 3, flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    personDetailItem: { minWidth: 90 },
+    personDetailLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.8 },
+    personDetailValue: { color: COLORS.ink, fontSize: 11, fontWeight: '700', marginTop: 4 },
   reportHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reportRefresh: { width: 38, height: 38, borderRadius: 19, borderWidth: 1, borderColor: COLORS.line, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center' },
   reportNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, backgroundColor: '#eef2ec', borderRadius: 4, marginBottom: 14 },
@@ -1627,15 +1681,25 @@ const styles = StyleSheet.create({
   calendarInviteeName: { color: COLORS.ink, fontSize: 10, fontWeight: '700' },
   calendarInviteeStatus: { fontSize: 8, fontWeight: '800' },
   loadingScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.paper },
-  authSafeArea: { flex: 1, backgroundColor: '#f4efe8' },
+  authSafeArea: { flex: 1, backgroundColor: '#ede8df' },
+  authDesktopSafeArea: { backgroundColor: '#262723' },
   authShell: { flex: 1, justifyContent: 'center' },
   authContent: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 34, paddingBottom: 40, justifyContent: 'center' },
+  authDesktopContent: { flexDirection: 'row', alignItems: 'stretch', justifyContent: 'center', paddingHorizontal: 56, paddingVertical: 56, maxWidth: 1440, width: '100%', alignSelf: 'center' },
+  authFeaturePanel: { flex: 1, maxWidth: 620, minHeight: 660, position: 'relative', overflow: 'hidden', backgroundColor: '#68755f', justifyContent: 'flex-end', padding: 48 },
+  authFeatureImage: { ...StyleSheet.absoluteFill, width: '100%', height: '100%', opacity: 0.46 },
+  authFeatureOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(29, 34, 27, 0.48)' },
+  authFeatureContent: { position: 'relative', maxWidth: 430 },
+  authFeatureKicker: { color: '#d9dfd2', fontSize: 11, fontWeight: '800', letterSpacing: 2.6, marginBottom: 20 },
+  authFeatureTitle: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 54, lineHeight: 58 },
+  authFeatureBody: { color: '#dfe4da', fontSize: 14, lineHeight: 22, marginTop: 20, maxWidth: 350 },
   authCard: { backgroundColor: COLORS.white, borderRadius: 22, paddingHorizontal: 22, paddingTop: 28, paddingBottom: 24, borderWidth: 1, borderColor: '#efeae2', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 5 },
+  authDesktopCard: { flex: 0.72, maxWidth: 500, minHeight: 660, borderRadius: 0, paddingHorizontal: 56, paddingTop: 58, paddingBottom: 48, justifyContent: 'center', shadowOpacity: 0 },
   authBrandMark: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#f2efe9', alignSelf: 'center' },
   authBrand: { color: COLORS.ink, fontSize: 15, fontWeight: '800', letterSpacing: 2.8, marginTop: 14, textAlign: 'center' },
   authBrandSub: { color: COLORS.muted, fontSize: 9, fontWeight: '700', letterSpacing: 1.8, marginTop: 4, textAlign: 'center' },
   authRule: { height: 1, backgroundColor: '#eae5df', marginTop: 30, marginBottom: 26 },
-  authTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 39, lineHeight: 45 },
+  authTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 42, lineHeight: 48, letterSpacing: 0 },
   authCaption: { color: COLORS.muted, fontSize: 14, lineHeight: 21, marginTop: 10, marginBottom: 26 },
   field: { marginBottom: 18 },
   fieldLabel: { color: COLORS.muted, fontSize: 9, fontWeight: '800', letterSpacing: 1.3, marginBottom: 8 },
@@ -1724,7 +1788,9 @@ const styles = StyleSheet.create({
   availabilityLabel: { color: '#aaa9a3', fontSize: 8, fontWeight: '800', letterSpacing: 1, marginTop: 3 },
   safeArea: { flex: 1, backgroundColor: COLORS.paper },
   appShell: { flex: 1, backgroundColor: COLORS.paper },
+  desktopAppShell: { maxWidth: 1600, alignSelf: 'center', width: '100%' },
   scrollContent: { paddingHorizontal: 22, paddingTop: 16, paddingBottom: 100 },
+  desktopScrollContent: { paddingLeft: 260, paddingRight: 48, paddingTop: 30, paddingBottom: 48, maxWidth: 1420, width: '100%', alignSelf: 'center' },
   topBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 34 },
   brandMark: { width: 37, height: 37, borderRadius: 19, overflow: 'hidden', backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center' },
   brandLogo: { width: 37, height: 37, borderRadius: 19 },
@@ -1766,6 +1832,11 @@ const styles = StyleSheet.create({
   notificationMessage: { color: COLORS.muted, fontSize: 12, lineHeight: 19 },
   nextRehearsalCard: { backgroundColor: COLORS.white, borderRadius: 5, padding: 20, borderWidth: 1, borderColor: '#eeece7', marginBottom: 29 }, cardTopLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, cardEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.25 }, livePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#eef2ec', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.olive, marginRight: 5 }, liveText: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, rehearsalTitle: { fontFamily: 'Georgia', fontSize: 24, color: COLORS.ink, marginTop: 19 }, detailRow: { flexDirection: 'row', alignItems: 'center', marginTop: 12 }, detailText: { color: COLORS.muted, fontSize: 12, marginLeft: 5 }, detailIcon: { marginLeft: 14 }, cardFooter: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: COLORS.line, marginTop: 19, paddingTop: 15 }, avatarStack: { flexDirection: 'row', width: 62 }, avatar: { width: 25, height: 25, borderRadius: 13, borderWidth: 1.5, borderColor: COLORS.white, justifyContent: 'center', alignItems: 'center' }, avatarText: { fontSize: 9, fontWeight: '800', color: COLORS.ink }, attendanceText: { color: COLORS.muted, fontSize: 11, flex: 1 }, checkInButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.ink, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 3, gap: 7 }, checkInText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }, sectionTitle: { fontFamily: 'Georgia', color: COLORS.ink, fontSize: 21 }, sectionCaption: { fontSize: 11, color: COLORS.muted, marginTop: 4 }, seeAll: { color: COLORS.ink, fontSize: 12, fontWeight: '800', textDecorationLine: 'underline' }, weekGrid: { flexDirection: 'row', gap: 8, marginBottom: 31 }, weekMetric: { flex: 1, backgroundColor: COLORS.white, borderWidth: 1, borderColor: '#eeece7', padding: 13, borderRadius: 4 }, metricNumber: { fontFamily: 'Georgia', fontSize: 30, color: COLORS.ink }, metricPercent: { fontFamily: 'Georgia', fontSize: 17 }, metricLabel: { color: COLORS.muted, fontSize: 8, fontWeight: '800', letterSpacing: 0.8, marginTop: 7 }, metricRule: { height: 3, backgroundColor: COLORS.ink, width: 26, marginTop: 12, marginBottom: 8 }, metricFoot: { color: COLORS.muted, fontSize: 9 }, quickGrid: { gap: 8 }, quickAction: { backgroundColor: COLORS.white, borderColor: COLORS.line, borderWidth: 1, minHeight: 55, borderRadius: 4, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11 }, quickIcon: { width: 33, height: 33, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, quickLabel: { color: COLORS.ink, fontWeight: '700', fontSize: 13, flex: 1 },
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 82, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10 }, navItem: { alignItems: 'center', flex: 1 }, navIconWrap: { width: 31, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, navIconActive: { backgroundColor: COLORS.ink }, navLabel: { color: COLORS.muted, fontSize: 10, marginTop: 6 }, navLabelActive: { color: COLORS.ink, fontWeight: '800' },
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 82, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.line, flexDirection: 'row', justifyContent: 'space-around', paddingTop: 10 },
+  desktopNav: { top: 0, bottom: 0, right: undefined, width: 220, height: '100%', borderTopWidth: 0, borderRightWidth: 1, borderRightColor: COLORS.line, flexDirection: 'column', justifyContent: 'flex-start', paddingTop: 128, paddingHorizontal: 18, gap: 8 },
+  navItem: { alignItems: 'center', flex: 1 },
+  desktopNavItem: { flex: 0, flexDirection: 'row', justifyContent: 'flex-start', width: '100%', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 5 },
+  desktopNavLabel: { marginTop: 0, marginLeft: 10, fontSize: 12 },
+  navIconWrap: { width: 31, height: 27, alignItems: 'center', justifyContent: 'center', borderRadius: 14 }, navIconActive: { backgroundColor: COLORS.ink }, navLabel: { color: COLORS.muted, fontSize: 10, marginTop: 6 }, navLabelActive: { color: COLORS.ink, fontWeight: '800' },
   pageEyebrow: { color: COLORS.muted, fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 12 }, pageTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 38 }, pageCaption: { color: COLORS.muted, fontSize: 14, marginTop: 8, marginBottom: 24 }, addButton: { backgroundColor: COLORS.ink, paddingVertical: 12, paddingHorizontal: 15, borderRadius: 3, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 7, marginBottom: 28 }, addButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' }, listLabel: { color: COLORS.muted, fontSize: 10, letterSpacing: 1.4, fontWeight: '800', marginBottom: 10 }, rehearsalListItem: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, padding: 10, borderRadius: 4, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, rehearsalListSelected: { borderColor: COLORS.olive, borderWidth: 1.5 }, dateBlock: { width: 48, height: 61, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 12 }, dateDay: { color: COLORS.white, fontSize: 8, fontWeight: '800', letterSpacing: 0.6 }, dateNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 24, lineHeight: 25 }, dateMonth: { color: COLORS.white, fontSize: 8, fontWeight: '800' }, listMain: { flex: 1 }, listTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, listMeta: { color: COLORS.muted, fontSize: 10, marginTop: 5 }, listAttendance: { color: COLORS.olive, fontSize: 10, fontWeight: '700', marginTop: 6 }, peopleSummary: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 19, flexDirection: 'row', alignItems: 'center', marginBottom: 22 }, peopleNumber: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 45, marginRight: 16 }, peopleTitle: { color: COLORS.white, fontSize: 15, fontWeight: '800' }, peopleCaption: { color: '#aaa9a3', fontSize: 11, marginTop: 5 }, personRow: { backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.line, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }, personAvatar: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 }, personInitials: { color: COLORS.ink, fontSize: 12, fontWeight: '800' }, personInfo: { flex: 1 }, personName: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 16 }, personRole: { color: COLORS.muted, fontSize: 11, marginTop: 4 }, songFeatured: { backgroundColor: COLORS.ink, borderRadius: 4, padding: 17, flexDirection: 'row', alignItems: 'center', marginBottom: 21 }, songIconLarge: { width: 45, height: 45, backgroundColor: COLORS.clay, alignItems: 'center', justifyContent: 'center', borderRadius: 3, marginRight: 13 }, songFeatureLabel: { color: '#b7b5ad', fontSize: 8, fontWeight: '800', letterSpacing: 1.2 }, songFeatureTitle: { color: COLORS.white, fontFamily: 'Georgia', fontSize: 20, marginTop: 6 }, songFeatureMeta: { color: '#b7b5ad', fontSize: 10, marginTop: 5 }, songRow: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 9 }, songRowMain: { flex: 1, flexDirection: 'row', alignItems: 'center' }, songIcon: { width: 36, height: 36, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 11 }, songInfo: { flex: 1 }, songTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 15 }, songMeta: { color: COLORS.muted, fontSize: 10, marginTop: 4 }, songStatus: { backgroundColor: '#f4e7e2', paddingHorizontal: 8, paddingVertical: 5, borderRadius: 3 }, readyStatus: { backgroundColor: '#eef2ec' }, songStatusText: { color: COLORS.clay, fontSize: 9, fontWeight: '800' }, readyStatusText: { color: COLORS.olive }, songPlayButton: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginLeft: 10 }, 
 });
