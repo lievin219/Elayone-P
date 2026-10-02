@@ -258,6 +258,10 @@ export async function updateUserRole(userId: string, role: Role) {
   return request<User>(`/api/users/${userId}/role`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ role }) });
 }
 
+export async function resetUserPassword(userId: string, password: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/users/${userId}/password`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ password }) });
+}
+
 export async function createMemberAccount(data: { name: string; email: string; password: string }): Promise<DirectoryUser> {
   return request<DirectoryUser>('/api/users', { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }

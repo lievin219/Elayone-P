@@ -79,4 +79,14 @@ router.patch('/:userId/role', auth_1.requireAdmin, async (request, response) => 
     });
     return response.json(user);
 });
+router.patch('/:userId/password', auth_1.requireAdmin, async (request, response) => {
+    const password = typeof request.body?.password === 'string' ? request.body.password : '';
+    if (password.length < 8)
+        return response.status(400).json({ message: 'The new password must be at least 8 characters.' });
+    const targetUser = await prisma_1.prisma.user.findUnique({ where: { id: String(request.params.userId) }, select: { id: true, name: true } });
+    if (!targetUser)
+        return response.status(404).json({ message: 'User not found.' });
+    await prisma_1.prisma.user.update({ where: { id: targetUser.id }, data: { passwordHash: await bcryptjs_1.default.hash(password, 12) } });
+    return response.json({ message: `Password reset for ${targetUser.name}.` });
+});
 exports.default = router;

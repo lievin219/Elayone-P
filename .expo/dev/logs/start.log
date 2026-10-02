@@ -2335,3 +2335,43 @@
 {"_e":"metro:client_log","_t":1790929460876,"level":"warn","data":["\"shadow*\" style props are deprecated. Use \"boxShadow\"."]}
 {"_e":"metro:client_log","_t":1790929460876,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
 {"_e":"metro:client_log","_t":1790929496345,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}
+{"_e":"root:init","_t":1790931083262,"format":"v0-jsonl","version":"57.0.22"}
+{"_e":"env:mode","_t":1790931083267,"nodeEnv":"development","babelEnv":"development","mode":"development"}
+{"_e":"env:load","_t":1790931083280,"mode":"development","files":["../../../.env.local"],"env":{"EXPO_PUBLIC_API_URL":"http://localhost:4000","SESSION_KEY":"elayone-session"}}
+{"_e":"devserver:start","_t":1790931086524,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":false,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1790931089381,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1790931091205,"plugins":[]}
+{"_e":"metro:instantiate","_t":1790931096831,"atlas":false,"workers":3,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1790931102786,"id":"1","platform":"web","environment":null,"entry":"node_modules/expo/AppEntry.js"}
+{"_e":"metro:bundling:progress","_t":1790931102919,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790931103225,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1790931103760,"id":"1","progress":0.010000000000000002,"total":2,"current":1}
+{"_e":"metro:bundling:progress","_t":1790931103912,"id":"1","progress":0.21301775147928997,"total":13,"current":6}
+{"_e":"metro:bundling:progress","_t":1790931104143,"id":"1","progress":0.21301775147928997,"total":14,"current":6}
+{"_e":"metro:bundling:progress","_t":1790931104272,"id":"1","progress":0.21301775147928997,"total":32,"current":6}
+{"_e":"metro:bundling:progress","_t":1790931104279,"id":"1","progress":0.21301775147928997,"total":32,"current":7}
+{"_e":"metro:bundling:progress","_t":1790931104386,"id":"1","progress":0.21301775147928997,"total":44,"current":17}
+{"_e":"metro:bundling:progress","_t":1790931104688,"id":"1","progress":0.21301775147928997,"total":45,"current":17}
+{"_e":"metro:bundling:progress","_t":1790931104787,"id":"1","progress":0.21301775147928997,"total":73,"current":26}
+{"_e":"metro:bundling:progress","_t":1790931104887,"id":"1","progress":0.21556122448979592,"total":112,"current":52}
+{"_e":"metro:bundling:progress","_t":1790931104989,"id":"1","progress":0.2981293989235575,"total":163,"current":89}
+{"_e":"metro:bundling:progress","_t":1790931105088,"id":"1","progress":0.3205117437921671,"total":189,"current":107}
+{"_e":"metro:bundling:progress","_t":1790931105200,"id":"1","progress":0.6184371759826562,"total":206,"current":162}
+{"_e":"metro:bundling:progress","_t":1790931105303,"id":"1","progress":0.6687604938271605,"total":225,"current":184}
+{"_e":"metro:bundling:progress","_t":1790931105417,"id":"1","progress":0.7307492195629552,"total":248,"current":212}
+{"_e":"metro:bundling:progress","_t":1790931105520,"id":"1","progress":0.7307492195629552,"total":295,"current":241}
+{"_e":"metro:bundling:progress","_t":1790931105623,"id":"1","progress":0.8331537931502994,"total":321,"current":293}
+{"_e":"metro:bundling:progress","_t":1790931105766,"id":"1","progress":0.8512259070294785,"total":336,"current":310}
+{"_e":"metro:bundling:done","_t":1790931105964,"id":"1","total":336,"ms":3047.534655}
+{"_e":"metro:client_log","_t":1790931106846,"level":"info","data":["%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools","font-weight:bold"]}
+{"_e":"metro:client_log","_t":1790931106847,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
+{"_e":"metro:client_log","_t":1790931106848,"level":"warn","data":["\"shadow*\" style props are deprecated. Use \"boxShadow\"."]}
+{"_e":"metro:client_log","_t":1790931106856,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
+{"_e":"metro:bundling:started","_t":1790931200939,"id":"5","platform":"web","environment":null,"entry":"node_modules/expo/AppEntry.js"}
+{"_e":"metro:bundling:progress","_t":1790931200943,"id":"5","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:done","_t":1790931201594,"id":"5","total":1,"ms":652.781865}
+{"_e":"metro:client_log","_t":1790931211079,"level":"info","data":["%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools","font-weight:bold"]}
+{"_e":"metro:client_log","_t":1790931211080,"level":"warn","data":["[expo-av]: Expo AV has been deprecated and will be removed in SDK 54. Use the `expo-audio` and `expo-video` packages to replace the required functionality."]}
+{"_e":"metro:client_log","_t":1790931211080,"level":"warn","data":["\"shadow*\" style props are deprecated. Use \"boxShadow\"."]}
+{"_e":"metro:client_log","_t":1790931211081,"level":"log","data":["Running application \"main\" with appParams:\n","{\"hydrate\": undefined, \"rootTag\": \"#root\"}","\nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."]}
+{"_e":"metro:client_log","_t":1790931231152,"level":"warn","data":["props.pointerEvents is deprecated. Use style.pointerEvents"]}

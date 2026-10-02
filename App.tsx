@@ -17,12 +17,13 @@ import {
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, deleteSong, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
+import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, deleteSong, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getChoirPeople, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, resetUserPassword, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
 
 type Rehearsal = RehearsalRecord & { color: string };
+type PersonItem = { id: string; name: string; role: string; initials: string; tone: string; part: string; availability: 'YES' | 'MAYBE' | 'NO' | 'PENDING' };
 
 function formatRehearsalDate(input: string) {
   const date = new Date(input);
@@ -82,7 +83,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('Home');
   const [selectedRehearsal, setSelectedRehearsal] = useState<string>('');
   const [checkedIn, setCheckedIn] = useState(false);
-  const [visiblePeople, setVisiblePeople] = useState(people);
+  const [visiblePeople, setVisiblePeople] = useState<PersonItem[]>(people);
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
   const [rehearsals, setRehearsals] = useState<Rehearsal[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
@@ -186,19 +187,30 @@ export default function App() {
     Promise.all([
       getAttendanceSummary('elayone-main-choir'),
       getRehearsals('elayone-main-choir'),
+      getChoirPeople('elayone-main-choir'),
       import('./src/api').then(({ getAnnouncements, getSongs }) => Promise.all([
         getAnnouncements('elayone-main-choir'),
         getSongs('elayone-main-choir'),
         getReminders('elayone-main-choir')
       ]))
     ])
-      .then(([summary, nextRehearsals, [nextAnnouncements, nextSongs, nextReminders]]) => {
+      .then(([summary, nextRehearsals, nextPeople, [nextAnnouncements, nextSongs, nextReminders]]) => {
+        const normalizedPeople: PersonItem[] = nextPeople.map((membership, index) => ({
+          id: membership.user.id,
+          name: membership.user.name,
+          role: membership.user.role === 'ADMIN' ? 'Administrator' : membership.user.role === 'LEADER' ? 'Choir leader' : 'Choir member',
+          initials: membership.user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
+          tone: ['#d7c5af', '#b9c2b0', '#d9b7b0', '#b3bdc9'][index % 4],
+          part: membership.vocalPart ?? 'Unassigned',
+          availability: membership.availability,
+        }));
         const normalizedAnnouncements: AnnouncementItem[] = nextAnnouncements.map((item) => ({
           ...item,
           authorName: item.author?.name ?? 'Elayone team',
         }));
         setAttendanceSummary(summary);
         setRehearsals(nextRehearsals.map((rehearsal, index) => ({ ...rehearsal, color: rehearsalColors[index % rehearsalColors.length] })));
+        setVisiblePeople(normalizedPeople);
         if (!selectedRehearsal && nextRehearsals[0]) {
           setSelectedRehearsal(nextRehearsals[0].id);
         }
@@ -210,6 +222,7 @@ export default function App() {
       .catch(() => {
         setAttendanceSummary({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
         setRehearsals([]);
+        setVisiblePeople([]);
         setAnnouncements([]);
         setReminders([]);
         setSongs(seedSongs);
@@ -764,6 +777,8 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [resetUserId, setResetUserId] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
   const choirId = 'elayone-main-choir';
   const choirMembers = users.filter((user) => user.memberships.some((membership) => membership.choirId === choirId));
 
@@ -944,6 +959,25 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
     }
   }
 
+  async function resetPasswordForUser(user: DirectoryUser) {
+    if (resetPassword.length < 8) {
+      setNotice({ type: 'error', text: 'The new password must be at least 8 characters.' });
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await resetUserPassword(user.id, resetPassword);
+      setResetUserId(null);
+      setResetPassword('');
+      setNotice({ type: 'success', text: result.message });
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not reset this password.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeMember(userId: string) {
     setNotice(null);
     try {
@@ -1010,6 +1044,13 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
                 <Text style={styles.personName}>{user.name}</Text>
                 <Text style={styles.personRole}>{user.email}</Text>
                 <Text style={styles.directoryMeta}>{user.role} · {user.memberships.length} choir membership{user.memberships.length === 1 ? '' : 's'}</Text>
+                {resetUserId === user.id && <View style={styles.resetPasswordBox}>
+                  <TextInput value={resetPassword} onChangeText={setResetPassword} placeholder="New password (8+ characters)" placeholderTextColor={COLORS.muted} secureTextEntry style={styles.resetPasswordInput} />
+                  <View style={styles.resetPasswordActions}>
+                    <TouchableOpacity onPress={() => { setResetUserId(null); setResetPassword(''); }}><Text style={styles.smallSecondaryActionText}>Cancel</Text></TouchableOpacity>
+                    <TouchableOpacity style={styles.smallActionButton} onPress={() => resetPasswordForUser(user)} disabled={busy}><Text style={styles.smallActionText}>{busy ? 'Saving...' : 'Save password'}</Text></TouchableOpacity>
+                  </View>
+                </View>}
               </View>
               <View style={styles.roleActions}>
                 {user.role !== 'ADMIN' && (
@@ -1027,6 +1068,9 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
                     <Ionicons name="person-remove-outline" size={17} color={COLORS.clay} />
                   </TouchableOpacity>
                 )}
+                <TouchableOpacity style={styles.smallSecondaryActionButton} onPress={() => { setResetUserId(resetUserId === user.id ? null : user.id); setResetPassword(''); }}>
+                  <Text style={styles.smallSecondaryActionText}>{resetUserId === user.id ? 'Close reset' : 'Reset password'}</Text>
+                </TouchableOpacity>
               </View>
             </View>
           );
@@ -1631,6 +1675,9 @@ const styles = StyleSheet.create({
   directoryCount: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 27, marginRight: 6 },
   directoryLabel: { color: COLORS.muted, fontSize: 11, flex: 1 },
   directoryRow: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 11, flexDirection: 'row', alignItems: 'center' },
+  resetPasswordBox: { marginTop: 8, padding: 8, backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3 },
+  resetPasswordInput: { height: 38, minWidth: 190, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, backgroundColor: COLORS.white, color: COLORS.ink, paddingHorizontal: 9, fontSize: 11 },
+  resetPasswordActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 7 },
   directoryAvatar: { width: 35, height: 35, borderRadius: 18, backgroundColor: '#d7c5af', alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   directoryInitial: { color: COLORS.ink, fontWeight: '800', fontSize: 13 },
   directoryMeta: { color: COLORS.olive, fontSize: 9, fontWeight: '700', marginTop: 4 },
