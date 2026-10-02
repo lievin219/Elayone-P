@@ -135,6 +135,20 @@ export async function getAnnouncements(choirId: string) {
   return request<AnnouncementRecord[]>(`/api/choirs/${choirId}/announcements`, { headers: await authHeaders() });
 }
 
+export type ReminderRecord = {
+  id: string;
+  kind: 'EVENT' | 'RESPONSE';
+  title: string;
+  message: string;
+  priority: 'NORMAL' | 'IMPORTANT';
+  createdAt: string;
+  eventId: string;
+};
+
+export async function getReminders(choirId: string): Promise<ReminderRecord[]> {
+  return request<ReminderRecord[]>(`/api/choirs/${choirId}/reminders`, { headers: await authHeaders() });
+}
+
 export type SongRecord = {
   id: string;
   title: string;

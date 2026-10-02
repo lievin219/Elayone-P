@@ -260,6 +260,7 @@ router.post('/:choirId/rehearsals/:rehearsalId/attendance', requireChoirAccess, 
     prisma.rehearsal.findFirst({ where: { id: rehearsalId, choirId: String(request.params.choirId) }, include: { invitations: { where: { userId }, select: { id: true } } } }),
   ]);
   if (!membership || !rehearsal) return response.status(403).json({ message: 'You cannot respond to attendance for this choir event.' });
+  if (rehearsal.endsAt.getTime() < Date.now()) return response.status(410).json({ message: 'This event has ended, so its attendance response is closed.' });
   const invitationCount = await prisma.eventInvitation.count({ where: { rehearsalId } });
   if (invitationCount > 0 && rehearsal.invitations.length === 0) return response.status(403).json({ message: 'This event is invitation-only, and you were not invited.' });
   const attendance = await prisma.attendance.upsert({ where: { rehearsalId_userId: { rehearsalId, userId } }, update: { status, present: status === 'YES' }, create: { rehearsalId, userId, status, present: status === 'YES' } });
@@ -272,6 +273,64 @@ router.get('/:choirId/announcements', requireChoirAccess, async (request, respon
     include: { author: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
   }));
+});
+
+router.get('/:choirId/reminders', requireChoirAccess, async (request: AuthRequest, response) => {
+  const choirId = String(request.params.choirId);
+  const userId = request.userId as string;
+  const viewer = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  const canManage = viewer?.role === 'ADMIN' || viewer?.role === 'LEADER';
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const events = await prisma.rehearsal.findMany({
+    where: { choirId, startsAt: { gte: now, lte: horizon } },
+    include: {
+      attendances: { select: { userId: true, status: true } },
+      invitations: { select: { userId: true } },
+    },
+    orderBy: { startsAt: 'asc' },
+  });
+  const reminders = events.flatMap((event) => {
+    const invited = event.invitations.length === 0 || event.invitations.some((invitation) => invitation.userId === userId);
+    if (!canManage && !invited) return [];
+    const hoursUntil = Math.max(0, Math.round((event.startsAt.getTime() - now.getTime()) / (60 * 60 * 1000)));
+    const eventLabel = event.customEventType ?? event.eventType.replace('_', ' ');
+    const pending = event.attendances.filter((attendance) => attendance.status === 'PENDING');
+    const accepted = event.attendances.filter((attendance) => attendance.status === 'YES').length;
+    const declined = event.attendances.filter((attendance) => attendance.status === 'NO').length;
+    const results: Array<{ id: string; kind: 'EVENT' | 'RESPONSE'; title: string; message: string; priority: 'NORMAL' | 'IMPORTANT'; createdAt: string; eventId: string }> = [{
+      id: `event-${event.id}-${userId}`,
+      kind: 'EVENT',
+      title: `${event.title} is coming up`,
+      message: `${eventLabel} starts ${hoursUntil < 24 ? `in ${hoursUntil} hour${hoursUntil === 1 ? '' : 's'}` : `on ${event.startsAt.toLocaleDateString()}`} at ${event.location}.`,
+      priority: hoursUntil < 24 ? 'IMPORTANT' : 'NORMAL',
+      createdAt: now.toISOString(),
+      eventId: event.id,
+    }];
+    if (canManage) {
+      results.push({
+        id: `response-${event.id}-${userId}`,
+        kind: 'RESPONSE',
+        title: `${event.title} attendance`,
+        message: `${accepted} accepted, ${declined} declined, ${pending.length} still awaiting a response.`,
+        priority: pending.length > 0 ? 'IMPORTANT' : 'NORMAL',
+        createdAt: now.toISOString(),
+        eventId: event.id,
+      });
+    } else if (event.attendances.find((attendance) => attendance.userId === userId)?.status === undefined) {
+      results.push({
+        id: `reply-${event.id}-${userId}`,
+        kind: 'RESPONSE',
+        title: `Respond to ${event.title}`,
+        message: 'Please accept, choose maybe, or decline this event.',
+        priority: 'IMPORTANT',
+        createdAt: now.toISOString(),
+        eventId: event.id,
+      });
+    }
+    return results;
+  });
+  return response.json(reminders);
 });
 
 router.post('/:choirId/announcements', requireAdmin, async (request: AuthRequest, response) => {

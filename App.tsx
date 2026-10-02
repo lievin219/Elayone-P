@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, RehearsalRecord, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
+import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
@@ -85,6 +85,7 @@ export default function App() {
   const [attendanceSummary, setAttendanceSummary] = useState<AttendanceSummary>({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
   const [rehearsals, setRehearsals] = useState<Rehearsal[]>([]);
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [reminders, setReminders] = useState<ReminderRecord[]>([]);
   const [songs, setSongs] = useState<SongItem[]>(seedSongs);
   const [hasNewAnnouncements, setHasNewAnnouncements] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -175,6 +176,7 @@ export default function App() {
   React.useEffect(() => {
     if (!session) {
       setAnnouncements([]);
+      setReminders([]);
       setHasNewAnnouncements(false);
       setShowNotifications(false);
       return;
@@ -185,10 +187,11 @@ export default function App() {
       getRehearsals('elayone-main-choir'),
       import('./src/api').then(({ getAnnouncements, getSongs }) => Promise.all([
         getAnnouncements('elayone-main-choir'),
-        getSongs('elayone-main-choir')
+        getSongs('elayone-main-choir'),
+        getReminders('elayone-main-choir')
       ]))
     ])
-      .then(([summary, nextRehearsals, [nextAnnouncements, nextSongs]]) => {
+      .then(([summary, nextRehearsals, [nextAnnouncements, nextSongs, nextReminders]]) => {
         const normalizedAnnouncements: AnnouncementItem[] = nextAnnouncements.map((item) => ({
           ...item,
           authorName: item.author?.name ?? 'Elayone team',
@@ -199,15 +202,32 @@ export default function App() {
           setSelectedRehearsal(nextRehearsals[0].id);
         }
         setAnnouncements(normalizedAnnouncements);
-        setHasNewAnnouncements(normalizedAnnouncements.length > 0);
+        setReminders(nextReminders);
+        setHasNewAnnouncements(normalizedAnnouncements.length > 0 || nextReminders.length > 0);
         setSongs(nextSongs.length > 0 ? nextSongs.map((song) => ({ ...song, icon: song.status === 'LEARN' ? 'book-outline' : 'musical-notes-outline' })) : seedSongs);
       })
       .catch(() => {
         setAttendanceSummary({ total: 0, confirmed: 0, rate: 0, upcoming: 0 });
         setRehearsals([]);
         setAnnouncements([]);
+        setReminders([]);
         setSongs(seedSongs);
       });
+  }, [session]);
+
+  React.useEffect(() => {
+    if (!session) return;
+    const refreshReminders = async () => {
+      try {
+        const nextReminders = await getReminders('elayone-main-choir');
+        setReminders(nextReminders);
+        setHasNewAnnouncements((current) => current || nextReminders.length > 0);
+      } catch {
+        // Keep existing reminders when the API is temporarily unavailable.
+      }
+    };
+    const interval = setInterval(refreshReminders, 60_000);
+    return () => clearInterval(interval);
   }, [session]);
 
   function handleNotificationsPress() {
@@ -241,7 +261,7 @@ export default function App() {
           </View>
 
           {showNotifications ? (
-            <NotificationsPanel announcements={announcements} onClose={() => setShowNotifications(false)} />
+            <NotificationsPanel announcements={announcements} reminders={reminders} onClose={() => setShowNotifications(false)} />
           ) : showHome ? (
             <>
               <View style={styles.hero}>
@@ -770,25 +790,31 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   }
 
   async function addEvent() {
-    if (!eventTitle || !eventLocation || !eventDate || !eventStartTime || !eventEndTime) {
-      return Alert.alert('Missing rehearsal details', 'Add the title, date, start time, end time, and location before saving.');
+    if (!eventTitle.trim() || !eventLocation.trim() || !eventDate.trim() || !eventStartTime.trim() || !eventEndTime.trim()) {
+      setNotice({ type: 'error', text: 'Add the event title, location, date, start time, and end time before saving.' });
+      return;
     }
     if (eventType === 'CUSTOM' && !customEventType.trim()) {
-      return Alert.alert('Missing event type', 'Enter a name for the custom event type before saving.');
+      setNotice({ type: 'error', text: 'Enter a name for the custom event type before saving.' });
+      return;
     }
     const parsedRecurrenceCount = Number(recurrenceCount);
     if (!Number.isInteger(parsedRecurrenceCount) || parsedRecurrenceCount < 1 || parsedRecurrenceCount > 52) {
-      return Alert.alert('Invalid recurrence', 'Choose between 1 and 52 occurrences.');
+      setNotice({ type: 'error', text: 'Choose between 1 and 52 occurrences.' });
+      return;
     }
     const startDate = new Date(`${eventDate}T${eventStartTime}:00`);
     const endDate = new Date(`${eventDate}T${eventEndTime}:00`);
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
-      return Alert.alert('Invalid schedule', 'Enter a valid date and time, and make sure the end time is after the start time.');
+      setNotice({ type: 'error', text: 'Enter a valid date and time, and make sure the end time is after the start time.' });
+      return;
     }
     if (inviteMode === 'SELECTED' && selectedInviteeIds.length === 0) {
-      return Alert.alert('Choose invitees', 'Select at least one choir member, or choose the whole choir.');
+      setNotice({ type: 'error', text: 'Choose at least one choir member, or select Whole choir.' });
+      return;
     }
     setBusy(true);
+    setNotice(null);
     try {
       const created = await createRehearsal(choirId, {
         title: eventTitle.trim(),
@@ -815,7 +841,6 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       setInviteMode('ALL');
       setSelectedInviteeIds([]);
       setNotice({ type: 'success', text: inviteMode === 'SELECTED' ? `Invitation sent to ${selectedInviteeIds.length} choir member${selectedInviteeIds.length === 1 ? '' : 's'}.` : 'Event added successfully and is now visible to the whole choir.' });
-      Alert.alert('Event scheduled', inviteMode === 'SELECTED' ? `Invitations sent to ${selectedInviteeIds.length} choir member${selectedInviteeIds.length === 1 ? '' : 's'}.` : 'The event is now visible to the whole choir.');
     } catch (error) {
       setNotice({ type: 'error', text: error instanceof Error ? error.message : 'We could not schedule the event. Please try again.' });
       Alert.alert('Could not add event', error instanceof Error ? error.message : 'Try again.');
@@ -855,8 +880,20 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   }
 
   async function addSong() {
-    if (!songTitle.trim()) return Alert.alert('Missing song title', 'Add a song title before saving it.');
+    if (!songTitle.trim()) {
+      setNotice({ type: 'error', text: 'Add a song title before saving it.' });
+      return;
+    }
+    if (songPreviewUrl.trim()) {
+      try {
+        new URL(songPreviewUrl.trim());
+      } catch {
+        setNotice({ type: 'error', text: 'Enter a valid preview URL, or leave it empty.' });
+        return;
+      }
+    }
     setBusy(true);
+    setNotice(null);
     try {
       const created = await createSong(choirId, {
         title: songTitle.trim(),
@@ -880,7 +917,6 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       setSongStatus('READY');
       setSongNotes('');
       setNotice({ type: 'success', text: 'Song saved successfully and added to the library.' });
-      Alert.alert('Song added', 'The song is now available in the library.');
     } catch (error) {
       setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not save the song right now.' });
       Alert.alert('Could not save song', error instanceof Error ? error.message : 'Try again.');
@@ -890,6 +926,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   }
 
   async function changeRole(userId: string, nextRole: 'MEMBER' | 'LEADER' | 'ADMIN') {
+    setNotice(null);
     try {
       const updated = await updateUserRole(userId, nextRole);
       setUsers((current) => current.map((user) => user.id === userId ? { ...user, role: updated.role } : user));
@@ -900,6 +937,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   }
 
   async function removeMember(userId: string) {
+    setNotice(null);
     try {
       await removeChoirMember(choirId, userId);
       setUsers((current) => current.filter((user) => user.id !== userId));
@@ -911,6 +949,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
 
   async function refreshUsers() {
     setUsersLoading(true);
+    setNotice(null);
     try {
       const refreshedUsers = await getAllUsers();
       setUsers(refreshedUsers);
@@ -1112,8 +1151,8 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   );
 }
 
-function NotificationsPanel({ announcements, onClose }: { announcements: AnnouncementItem[]; onClose: () => void }) {
-  return <View style={styles.notificationsPanel}><View style={styles.notificationsHeader}><View><Text style={styles.pageEyebrow}>ELAYONE / ALERTS</Text><Text style={styles.pageTitle}>Notifications</Text></View><TouchableOpacity onPress={onClose} style={styles.closeButton}><Ionicons name="close" size={18} color={COLORS.ink} /></TouchableOpacity></View>{announcements.length === 0 ? <View style={styles.emptyState}><Ionicons name="notifications-off-outline" size={24} color={COLORS.muted} /><Text style={styles.emptyStateTitle}>No announcements yet</Text><Text style={styles.emptyStateText}>Your choir updates will show up here when they are published.</Text></View> : announcements.map((item) => <View key={item.id} style={styles.notificationCard}><View style={styles.notificationTop}><Text style={styles.notificationLabel}>{item.priority === 'IMPORTANT' ? 'IMPORTANT' : 'UPDATE'}</Text><Text style={styles.notificationTime}>{new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></View><Text style={styles.notificationTitle}>{item.title}</Text><View style={styles.notificationMeta}><Ionicons name="person-circle-outline" size={14} color={COLORS.muted} /><Text style={styles.notificationAuthor}>{item.authorName ?? item.author?.name ?? 'Elayone team'}</Text></View><Text style={styles.notificationMessage}>{item.message}</Text></View>)}</View>;
+function NotificationsPanel({ announcements, reminders, onClose }: { announcements: AnnouncementItem[]; reminders: ReminderRecord[]; onClose: () => void }) {
+  return <View style={styles.notificationsPanel}><View style={styles.notificationsHeader}><View><Text style={styles.pageEyebrow}>ELAYONE / ALERTS</Text><Text style={styles.pageTitle}>Notifications</Text></View><TouchableOpacity onPress={onClose} style={styles.closeButton}><Ionicons name="close" size={18} color={COLORS.ink} /></TouchableOpacity></View>{announcements.length === 0 && reminders.length === 0 ? <View style={styles.emptyState}><Ionicons name="notifications-off-outline" size={24} color={COLORS.muted} /><Text style={styles.emptyStateTitle}>No reminders yet</Text><Text style={styles.emptyStateText}>Event and choir updates will appear here when they need your attention.</Text></View> : <>{reminders.map((item) => <View key={item.id} style={styles.notificationCard}><View style={styles.notificationTop}><Text style={styles.notificationLabel}>{item.priority === 'IMPORTANT' ? 'ACTION NEEDED' : 'REMINDER'}</Text><Text style={styles.notificationTime}>{new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></View><Text style={styles.notificationTitle}>{item.title}</Text><View style={styles.notificationMeta}><Ionicons name={item.kind === 'RESPONSE' ? 'checkbox-outline' : 'calendar-outline'} size={14} color={COLORS.muted} /><Text style={styles.notificationAuthor}>{item.kind === 'RESPONSE' ? 'Response reminder' : 'Event reminder'}</Text></View><Text style={styles.notificationMessage}>{item.message}</Text></View>)}{announcements.map((item) => <View key={item.id} style={styles.notificationCard}><View style={styles.notificationTop}><Text style={styles.notificationLabel}>{item.priority === 'IMPORTANT' ? 'IMPORTANT' : 'UPDATE'}</Text><Text style={styles.notificationTime}>{new Date(item.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></View><Text style={styles.notificationTitle}>{item.title}</Text><View style={styles.notificationMeta}><Ionicons name="person-circle-outline" size={14} color={COLORS.muted} /><Text style={styles.notificationAuthor}>{item.authorName ?? item.author?.name ?? 'Elayone team'}</Text></View><Text style={styles.notificationMessage}>{item.message}</Text></View>)}</>}</View>;
 }
 
 function AdminForm({ title, icon, children }: { title: string; icon: IconName; children: React.ReactNode }) {
