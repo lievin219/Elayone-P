@@ -1275,12 +1275,23 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
     <KeyboardAvoidingView style={styles.authShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={[styles.authContent, isDesktop && styles.authDesktopContent]} keyboardShouldPersistTaps="handled">
         {isDesktop && <View style={styles.authFeaturePanel}>
-          <Image source={require('./elayone.jpg')} style={styles.authFeatureImage} resizeMode="cover" />
-          <View style={styles.authFeatureOverlay} />
+          <View style={styles.authArtworkGlow} />
+          <View style={styles.authArtworkCircleLarge} />
+          <View style={styles.authArtworkCircleSmall} />
+          <View style={styles.authArtworkCard}>
+            <View style={styles.authArtworkLogoFrame}>
+              <Image source={require('./elayone.jpg')} style={styles.authArtworkLogo} resizeMode="cover" accessibilityLabel="Elayone Music logo" />
+            </View>
+            <View style={styles.authSoundWaves}>
+              {[22, 42, 66, 88, 58, 36, 72, 48, 26].map((height, index) => <View key={index} style={[styles.authSoundWave, { height }]} />)}
+            </View>
+            <Text style={styles.authArtworkCaption}>SING TOGETHER</Text>
+          </View>
+          <View style={styles.authArtworkNote}><Ionicons name="musical-notes" size={18} color="#675d4a" /><Text style={styles.authArtworkNoteText}>One shared song</Text></View>
           <View style={styles.authFeatureContent}>
-            <Text style={styles.authFeatureKicker}>ELAYONE MUSIC</Text>
-            <Text style={styles.authFeatureTitle}>One choir.{`\n`}One offering.</Text>
-            <Text style={styles.authFeatureBody}>Keep every rehearsal, response, song, and ministry moment moving in the same direction.</Text>
+            <Text style={styles.authFeatureKicker}>WELCOME TO ELAYONE</Text>
+            <Text style={styles.authFeatureTitle}>Make room for{`\n`}every voice.</Text>
+            <Text style={styles.authFeatureBody}>A friendly place to prepare, serve, and grow together in music.</Text>
           </View>
         </View>}
         <View style={[styles.authCard, isDesktop && styles.authDesktopCard]}>
