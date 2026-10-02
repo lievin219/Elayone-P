@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -755,6 +756,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   const [songTitle, setSongTitle] = useState('');
   const [songKey, setSongKey] = useState('');
   const [songPreviewUrl, setSongPreviewUrl] = useState('');
+  const [songMedia, setSongMedia] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
   const [songStatus, setSongStatus] = useState<'READY' | 'LEARN'>('READY');
   const [songNotes, setSongNotes] = useState('');
   const [priority, setPriority] = useState<'NORMAL' | 'IMPORTANT'>('NORMAL');
@@ -884,7 +886,11 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       setNotice({ type: 'error', text: 'Add a song title before saving it.' });
       return;
     }
-    if (songPreviewUrl.trim()) {
+    if (!songMedia && !songPreviewUrl.trim()) {
+      setNotice({ type: 'error', text: 'Attach an MP3 or MP4 file, or provide a preview URL.' });
+      return;
+    }
+    if (!songMedia && songPreviewUrl.trim()) {
       try {
         new URL(songPreviewUrl.trim());
       } catch {
@@ -899,8 +905,9 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
         title: songTitle.trim(),
         key: songKey.trim() || undefined,
         status: songStatus,
-        previewUrl: songPreviewUrl.trim() || undefined,
+        previewUrl: songMedia ? undefined : songPreviewUrl.trim() || undefined,
         notes: songNotes.trim() || undefined,
+        media: songMedia ?? undefined,
       });
       const nextSong: SongItem = {
         ...created,
@@ -914,6 +921,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       setSongTitle('');
       setSongKey('');
       setSongPreviewUrl('');
+      setSongMedia(null);
       setSongStatus('READY');
       setSongNotes('');
       setNotice({ type: 'success', text: 'Song saved successfully and added to the library.' });
@@ -1120,7 +1128,20 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       <AdminForm title="Add a song" icon="musical-notes-outline">
         <Field label="SONG TITLE" value={songTitle} onChangeText={setSongTitle} placeholder="I will praise you" />
         <Field label="KEY" value={songKey} onChangeText={setSongKey} placeholder="Key of G" />
-        <Field label="PREVIEW URL" value={songPreviewUrl} onChangeText={setSongPreviewUrl} placeholder="https://example.com/song.mp3" />
+        <TouchableOpacity style={styles.uploadButton} onPress={async () => {
+          const result = await DocumentPicker.getDocumentAsync({ type: ['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'], copyToCacheDirectory: true, multiple: false });
+          if (!result.canceled && result.assets[0]) {
+            const asset = result.assets[0];
+            setSongMedia({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType ?? (asset.name.toLowerCase().endsWith('.mp4') ? 'video/mp4' : 'audio/mpeg') });
+            setSongPreviewUrl('');
+            setNotice(null);
+          }
+        }} disabled={busy}>
+          <Ionicons name="cloud-upload-outline" size={17} color={COLORS.ink} />
+          <Text style={styles.uploadButtonText}>{songMedia ? 'Choose a different media file' : 'Attach MP3 or MP4'}</Text>
+        </TouchableOpacity>
+        {songMedia && <Text style={styles.uploadFileName}>{songMedia.name}</Text>}
+        <Field label="OR PREVIEW URL" value={songPreviewUrl} onChangeText={(value) => { setSongPreviewUrl(value); if (value.trim()) setSongMedia(null); }} placeholder="https://example.com/song.mp3" />
         <Field label="NOTES" value={songNotes} onChangeText={setSongNotes} placeholder="Add singing notes or rehearsal tips" multiline />
         <TouchableOpacity style={styles.adminButton} onPress={addSong} disabled={busy}>
           <Text style={styles.adminButtonText}>{busy ? 'Saving...' : 'Add song'}</Text>
@@ -1598,6 +1619,9 @@ const styles = StyleSheet.create({
   directoryMeta: { color: COLORS.olive, fontSize: 9, fontWeight: '700', marginTop: 4 },
   adminButton: { backgroundColor: COLORS.ink, minHeight: 43, borderRadius: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7 },
   adminButtonText: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+  uploadButton: { minHeight: 43, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, backgroundColor: COLORS.paper, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginBottom: 8 },
+  uploadButtonText: { color: COLORS.ink, fontSize: 11, fontWeight: '800' },
+  uploadFileName: { color: COLORS.olive, fontSize: 10, fontWeight: '700', marginBottom: 12 },
   inlineFieldRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   segmentedButton: { flex: 1, borderWidth: 1, borderColor: COLORS.line, borderRadius: 3, minHeight: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.paper },
   segmentedButtonActive: { borderColor: COLORS.ink, backgroundColor: '#eef2ec' },

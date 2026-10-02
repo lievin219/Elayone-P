@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const cors_1 = __importDefault(require("cors"));
 const express_1 = __importDefault(require("express"));
+const node_path_1 = __importDefault(require("node:path"));
 const node_os_1 = __importDefault(require("node:os"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const choir_1 = __importDefault(require("./routes/choir"));
@@ -16,6 +17,7 @@ if (!process.env.DATABASE_URL || !process.env.JWT_SECRET)
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
+app.use('/uploads', express_1.default.static(node_path_1.default.resolve(process.cwd(), 'uploads')));
 app.get('/health', (_request, response) => response.json({ ok: true, service: 'elayone-choir-api' }));
 app.use('/api/auth', auth_1.default);
 app.use('/api/choirs', auth_2.requireAuth, choir_1.default);

@@ -81,9 +81,13 @@ async function authHeaders(): Promise<HeadersInit> {
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
+    const headers = new Headers(options.headers ?? {});
+    if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
     response = await fetch(`${API_URL}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+      headers,
     });
   } catch {
     throw new Error(`Cannot reach the server at ${API_URL}. Make sure the API is running and your phone is on the same Wi-Fi network.`);
@@ -162,8 +166,24 @@ export async function getSongs(choirId: string): Promise<SongRecord[]> {
   return request<SongRecord[]>(`/api/choirs/${choirId}/songs`, { headers: await authHeaders() });
 }
 
-export async function createSong(choirId: string, data: { title: string; key?: string; status?: string; previewUrl?: string; notes?: string }) {
-  return request<SongRecord>(`/api/choirs/${choirId}/songs`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
+export async function createSong(choirId: string, data: { title: string; key?: string; status?: string; previewUrl?: string; notes?: string; media?: { uri: string; name: string; mimeType: string } }) {
+  const headers = await authHeaders();
+  if (data.media) {
+    const form = new FormData();
+    form.append('title', data.title);
+    if (data.key) form.append('key', data.key);
+    if (data.status) form.append('status', data.status);
+    if (data.notes) form.append('notes', data.notes);
+    if (Platform.OS === 'web') {
+      const fileResponse = await fetch(data.media.uri);
+      const fileBlob = await fileResponse.blob();
+      form.append('media', fileBlob, data.media.name);
+    } else {
+      form.append('media', { uri: data.media.uri, name: data.media.name, type: data.media.mimeType } as unknown as Blob);
+    }
+    return request<SongRecord>(`/api/choirs/${choirId}/songs`, { method: 'POST', headers, body: form });
+  }
+  return request<SongRecord>(`/api/choirs/${choirId}/songs`, { method: 'POST', headers, body: JSON.stringify(data) });
 }
 
 export type AttendanceSummary = { total: number; confirmed: number; rate: number; upcoming: number };

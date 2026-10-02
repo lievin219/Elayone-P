@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
+import path from 'node:path';
 import os from 'node:os';
 import authRoutes from './routes/auth';
 import choirRoutes from './routes/choir';
@@ -12,6 +13,7 @@ if (!process.env.DATABASE_URL || !process.env.JWT_SECRET) throw new Error('DATAB
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 app.get('/health', (_request, response) => response.json({ ok: true, service: 'elayone-choir-api' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/choirs', requireAuth, choirRoutes);

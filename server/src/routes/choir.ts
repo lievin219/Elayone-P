@@ -1,8 +1,22 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { prisma } from '../lib/prisma';
 import { AuthRequest, requireAdmin, requireChoirAccess } from '../middleware/auth';
 
 const router = Router();
+const uploadDirectory = path.resolve(process.cwd(), 'uploads');
+fs.mkdirSync(uploadDirectory, { recursive: true });
+const mediaUpload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDirectory,
+    filename: (_request, file, callback) => callback(null, `${crypto.randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_request, file, callback) => callback(null, ['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'].includes(file.mimetype)),
+});
 
 router.get('/me', async (request: AuthRequest, response) => {
   const memberships = await prisma.membership.findMany({ where: { userId: request.userId }, include: { choir: true } });
@@ -362,9 +376,12 @@ router.get('/:choirId/songs', requireChoirAccess, async (request, response) => {
   return response.json(await prisma.song.findMany({ where: { choirId: String(request.params.choirId) }, orderBy: { title: 'asc' } }));
 });
 
-router.post('/:choirId/songs', requireAdmin, async (request, response) => {
+router.post('/:choirId/songs', requireAdmin, mediaUpload.single('media'), async (request, response) => {
   const { title, key, status, notes, previewUrl } = request.body;
   if (!title || !title.trim()) return response.status(400).json({ message: 'Song title is required.' });
+  if (!request.file && !previewUrl) return response.status(400).json({ message: 'Attach an MP3 or MP4 file, or provide a preview URL.' });
+  if (request.file && !['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'].includes(request.file.mimetype)) return response.status(400).json({ message: 'Only MP3 and MP4 files are supported.' });
+  const uploadedUrl = request.file ? `${request.protocol}://${request.get('host')}/uploads/${request.file.filename}` : null;
   const song = await prisma.song.create({
     data: {
       choirId: String(request.params.choirId),
@@ -372,7 +389,7 @@ router.post('/:choirId/songs', requireAdmin, async (request, response) => {
       key: key ? String(key).trim() : null,
       status: status === 'READY' || status === 'LEARN' ? status : 'LEARN',
       notes: notes ? String(notes).trim() : null,
-      previewUrl: previewUrl ? String(previewUrl).trim() : null,
+      previewUrl: uploadedUrl ?? (previewUrl ? String(previewUrl).trim() : null),
     },
   });
   return response.status(201).json(song);

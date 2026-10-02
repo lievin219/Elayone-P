@@ -1,9 +1,26 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const multer_1 = __importDefault(require("multer"));
+const node_path_1 = __importDefault(require("node:path"));
+const node_crypto_1 = __importDefault(require("node:crypto"));
+const node_fs_1 = __importDefault(require("node:fs"));
 const prisma_1 = require("../lib/prisma");
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
+const uploadDirectory = node_path_1.default.resolve(process.cwd(), 'uploads');
+node_fs_1.default.mkdirSync(uploadDirectory, { recursive: true });
+const mediaUpload = (0, multer_1.default)({
+    storage: multer_1.default.diskStorage({
+        destination: uploadDirectory,
+        filename: (_request, file, callback) => callback(null, `${node_crypto_1.default.randomUUID()}${node_path_1.default.extname(file.originalname).toLowerCase()}`),
+    }),
+    limits: { fileSize: 100 * 1024 * 1024 },
+    fileFilter: (_request, file, callback) => callback(null, ['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'].includes(file.mimetype)),
+});
 router.get('/me', async (request, response) => {
     const memberships = await prisma_1.prisma.membership.findMany({ where: { userId: request.userId }, include: { choir: true } });
     return response.json(memberships);
@@ -359,10 +376,15 @@ router.delete('/:choirId/announcements/:announcementId', auth_1.requireAdmin, as
 router.get('/:choirId/songs', auth_1.requireChoirAccess, async (request, response) => {
     return response.json(await prisma_1.prisma.song.findMany({ where: { choirId: String(request.params.choirId) }, orderBy: { title: 'asc' } }));
 });
-router.post('/:choirId/songs', auth_1.requireAdmin, async (request, response) => {
+router.post('/:choirId/songs', auth_1.requireAdmin, mediaUpload.single('media'), async (request, response) => {
     const { title, key, status, notes, previewUrl } = request.body;
     if (!title || !title.trim())
         return response.status(400).json({ message: 'Song title is required.' });
+    if (!request.file && !previewUrl)
+        return response.status(400).json({ message: 'Attach an MP3 or MP4 file, or provide a preview URL.' });
+    if (request.file && !['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'].includes(request.file.mimetype))
+        return response.status(400).json({ message: 'Only MP3 and MP4 files are supported.' });
+    const uploadedUrl = request.file ? `${request.protocol}://${request.get('host')}/uploads/${request.file.filename}` : null;
     const song = await prisma_1.prisma.song.create({
         data: {
             choirId: String(request.params.choirId),
@@ -370,7 +392,7 @@ router.post('/:choirId/songs', auth_1.requireAdmin, async (request, response) =>
             key: key ? String(key).trim() : null,
             status: status === 'READY' || status === 'LEARN' ? status : 'LEARN',
             notes: notes ? String(notes).trim() : null,
-            previewUrl: previewUrl ? String(previewUrl).trim() : null,
+            previewUrl: uploadedUrl ?? (previewUrl ? String(previewUrl).trim() : null),
         },
     });
     return response.status(201).json(song);
