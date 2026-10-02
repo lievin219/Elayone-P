@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { RequestHandler, Router } from 'express';
 import multer from 'multer';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -17,6 +17,13 @@ const mediaUpload = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (_request, file, callback) => callback(null, ['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'].includes(file.mimetype)),
 });
+const uploadMedia: RequestHandler = (request, response, next) => {
+  mediaUpload.single('media')(request, response, (error) => {
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') return response.status(413).json({ message: 'The media file is too large. Maximum size is 100 MB.' });
+    if (error) return response.status(400).json({ message: 'Only MP3 and MP4 media files are supported.' });
+    return next();
+  });
+};
 
 router.get('/me', async (request: AuthRequest, response) => {
   const memberships = await prisma.membership.findMany({ where: { userId: request.userId }, include: { choir: true } });
@@ -376,7 +383,7 @@ router.get('/:choirId/songs', requireChoirAccess, async (request, response) => {
   return response.json(await prisma.song.findMany({ where: { choirId: String(request.params.choirId) }, orderBy: { title: 'asc' } }));
 });
 
-router.post('/:choirId/songs', requireAdmin, mediaUpload.single('media'), async (request, response) => {
+router.post('/:choirId/songs', requireAdmin, uploadMedia, async (request, response) => {
   const { title, key, status, notes, previewUrl } = request.body;
   if (!title || !title.trim()) return response.status(400).json({ message: 'Song title is required.' });
   if (!request.file && !previewUrl) return response.status(400).json({ message: 'Attach an MP3 or MP4 file, or provide a preview URL.' });
@@ -393,6 +400,17 @@ router.post('/:choirId/songs', requireAdmin, mediaUpload.single('media'), async 
     },
   });
   return response.status(201).json(song);
+});
+
+router.delete('/:choirId/songs/:songId', requireAdmin, async (request, response) => {
+  const song = await prisma.song.findFirst({ where: { id: String(request.params.songId), choirId: String(request.params.choirId) } });
+  if (!song) return response.status(404).json({ message: 'Song not found.' });
+  await prisma.song.delete({ where: { id: song.id } });
+  if (song.previewUrl?.includes('/uploads/')) {
+    const filename = song.previewUrl.split('/uploads/')[1];
+    if (filename && !filename.includes('/') && !filename.includes('..')) fs.rmSync(path.join(uploadDirectory, filename), { force: true });
+  }
+  return response.status(204).send();
 });
 
 export default router;

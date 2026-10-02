@@ -186,6 +186,10 @@ export async function createSong(choirId: string, data: { title: string; key?: s
   return request<SongRecord>(`/api/choirs/${choirId}/songs`, { method: 'POST', headers, body: JSON.stringify(data) });
 }
 
+export async function deleteSong(choirId: string, songId: string): Promise<void> {
+  return request<void>(`/api/choirs/${choirId}/songs/${songId}`, { method: 'DELETE', headers: await authHeaders() });
+}
+
 export type AttendanceSummary = { total: number; confirmed: number; rate: number; upcoming: number };
 
 export type AttendanceResponseStatus = 'YES' | 'MAYBE' | 'NO' | 'PENDING';

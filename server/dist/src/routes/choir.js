@@ -21,6 +21,15 @@ const mediaUpload = (0, multer_1.default)({
     limits: { fileSize: 100 * 1024 * 1024 },
     fileFilter: (_request, file, callback) => callback(null, ['audio/mpeg', 'audio/mp3', 'video/mp4', 'audio/mp4'].includes(file.mimetype)),
 });
+const uploadMedia = (request, response, next) => {
+    mediaUpload.single('media')(request, response, (error) => {
+        if (error instanceof multer_1.default.MulterError && error.code === 'LIMIT_FILE_SIZE')
+            return response.status(413).json({ message: 'The media file is too large. Maximum size is 100 MB.' });
+        if (error)
+            return response.status(400).json({ message: 'Only MP3 and MP4 media files are supported.' });
+        return next();
+    });
+};
 router.get('/me', async (request, response) => {
     const memberships = await prisma_1.prisma.membership.findMany({ where: { userId: request.userId }, include: { choir: true } });
     return response.json(memberships);
@@ -376,7 +385,7 @@ router.delete('/:choirId/announcements/:announcementId', auth_1.requireAdmin, as
 router.get('/:choirId/songs', auth_1.requireChoirAccess, async (request, response) => {
     return response.json(await prisma_1.prisma.song.findMany({ where: { choirId: String(request.params.choirId) }, orderBy: { title: 'asc' } }));
 });
-router.post('/:choirId/songs', auth_1.requireAdmin, mediaUpload.single('media'), async (request, response) => {
+router.post('/:choirId/songs', auth_1.requireAdmin, uploadMedia, async (request, response) => {
     const { title, key, status, notes, previewUrl } = request.body;
     if (!title || !title.trim())
         return response.status(400).json({ message: 'Song title is required.' });
@@ -396,5 +405,17 @@ router.post('/:choirId/songs', auth_1.requireAdmin, mediaUpload.single('media'),
         },
     });
     return response.status(201).json(song);
+});
+router.delete('/:choirId/songs/:songId', auth_1.requireAdmin, async (request, response) => {
+    const song = await prisma_1.prisma.song.findFirst({ where: { id: String(request.params.songId), choirId: String(request.params.choirId) } });
+    if (!song)
+        return response.status(404).json({ message: 'Song not found.' });
+    await prisma_1.prisma.song.delete({ where: { id: song.id } });
+    if (song.previewUrl?.includes('/uploads/')) {
+        const filename = song.previewUrl.split('/uploads/')[1];
+        if (filename && !filename.includes('/') && !filename.includes('..'))
+            node_fs_1.default.rmSync(node_path_1.default.join(uploadDirectory, filename), { force: true });
+    }
+    return response.status(204).send();
 });
 exports.default = router;

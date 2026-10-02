@@ -17,7 +17,7 @@ import {
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
+import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, deleteSong, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
@@ -333,7 +333,7 @@ export default function App() {
             const next = current.filter((announcement) => announcement.id !== id);
             setHasNewAnnouncements(next.length > 0);
             return next;
-          }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} onRehearsalAdded={(nextRehearsal) => { setRehearsals((current) => [nextRehearsal, ...current]); setSelectedRehearsal(nextRehearsal.id); }} /> : (
+          }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} onSongDeleted={(id) => setSongs((current) => current.filter((song) => song.id !== id))} songs={songs} onRehearsalAdded={(nextRehearsal) => { setRehearsals((current) => [nextRehearsal, ...current]); setSelectedRehearsal(nextRehearsal.id); }} /> : (
             <TabView tab={activeTab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onOpenCalendar={() => setActiveTab('Calendar')} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
@@ -736,7 +736,7 @@ function CalendarEventCard({ event, canManage, response, busy, onRespond }: { ev
   </View>;
 }
 
-function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, onSongAdded, onRehearsalAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; onSongAdded: (song: SongItem) => void; onRehearsalAdded: (rehearsal: Rehearsal) => void }) {
+function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, songs, onSongAdded, onSongDeleted, onRehearsalAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; songs: SongItem[]; onSongAdded: (song: SongItem) => void; onSongDeleted: (id: string) => void; onRehearsalAdded: (rehearsal: Rehearsal) => void }) {
   const [memberName, setMemberName] = useState('');
   const [memberEmail, setMemberEmail] = useState('');
   const [memberPassword, setMemberPassword] = useState('');
@@ -1125,7 +1125,22 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
         ))}
       </AdminForm>
 
-      <AdminForm title="Add a song" icon="musical-notes-outline">
+      <AdminForm title="Manage songs" icon="musical-notes-outline">
+        {songs.length === 0 ? <Text style={styles.adminHelp}>No songs have been added yet.</Text> : songs.map((song) => <View key={song.id ?? song.title} style={styles.adminSongRow}>
+          <View style={{ flex: 1 }}><Text style={styles.adminAnnouncementTitle}>{song.title}</Text><Text style={styles.adminAnnouncementMeta}>{song.status} · {song.key ?? 'No key'}</Text></View>
+          {song.id && <TouchableOpacity style={styles.removeIconButton} onPress={async () => {
+            const songId = song.id;
+            if (!songId) return;
+            try {
+              await deleteSong(choirId, songId);
+              onSongDeleted(songId);
+              setNotice({ type: 'success', text: `${song.title} was removed from the song library.` });
+            } catch (error) {
+              setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not remove this song.' });
+            }
+          }} accessibilityLabel={`Delete ${song.title}`}><Ionicons name="trash-outline" size={17} color={COLORS.clay} /></TouchableOpacity>}
+        </View>)}
+        <Text style={styles.adminFormSubheading}>Add a new song</Text>
         <Field label="SONG TITLE" value={songTitle} onChangeText={setSongTitle} placeholder="I will praise you" />
         <Field label="KEY" value={songKey} onChangeText={setSongKey} placeholder="Key of G" />
         <TouchableOpacity style={styles.uploadButton} onPress={async () => {
@@ -1602,6 +1617,7 @@ const styles = StyleSheet.create({
   adminFormHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   adminFormIcon: { width: 32, height: 32, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   adminFormTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18 },
+  adminFormSubheading: { color: COLORS.muted, fontSize: 10, fontWeight: '800', marginTop: 14, marginBottom: 8 },
   directoryHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   roleActions: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, flexWrap: 'wrap', justifyContent: 'flex-end' },
   smallActionButton: { backgroundColor: '#edf2ec', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6 },
@@ -1609,6 +1625,7 @@ const styles = StyleSheet.create({
   smallSecondaryActionButton: { backgroundColor: '#f5f1ee', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6 },
   smallSecondaryActionText: { color: COLORS.muted, fontSize: 9, fontWeight: '800' },
   adminAnnouncementRow: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  adminSongRow: { borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
   adminAnnouncementTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
   adminAnnouncementMeta: { color: COLORS.muted, fontSize: 10, marginTop: 4 },
   directoryCount: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 27, marginRight: 6 },
