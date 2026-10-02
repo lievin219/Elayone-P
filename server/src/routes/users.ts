@@ -1,8 +1,16 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AuthRequest, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+const newMemberSchema = z.object({
+  name: z.string().trim().min(2, 'Enter the member’s full name.'),
+  email: z.string().trim().email('Enter a valid email address.').transform((email) => email.toLowerCase()),
+  password: z.string().min(8, 'The temporary password must be at least 8 characters.'),
+});
 
 router.get('/', async (_request, response) => {
   const users = await prisma.user.findMany({
@@ -17,6 +25,34 @@ router.get('/', async (_request, response) => {
     orderBy: { createdAt: 'desc' },
   });
   return response.json(users);
+});
+
+router.post('/', requireAdmin, async (request: AuthRequest, response) => {
+  const parsed = newMemberSchema.safeParse(request.body);
+  if (!parsed.success) return response.status(400).json({ message: parsed.error.issues[0].message });
+  const { name, email, password } = parsed.data;
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) return response.status(409).json({ message: 'An account already uses that email. Try signing in or enter a different address.' });
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const user = await prisma.$transaction(async (transaction) => {
+    const choir = await transaction.choir.upsert({
+      where: { id: 'elayone-main-choir' },
+      update: {},
+      create: { id: 'elayone-main-choir', name: 'Elayone Choir', description: 'A choir serving with one voice.' },
+    });
+    const created = await transaction.user.create({
+      data: { name, email, passwordHash, role: 'MEMBER' },
+      select: { id: true, name: true, email: true, role: true, createdAt: true },
+    });
+    await transaction.membership.create({ data: { userId: created.id, choirId: choir.id } });
+    return created;
+  });
+
+  return response.status(201).json({
+    ...user,
+    memberships: [{ choirId: 'elayone-main-choir', vocalPart: null, availability: 'PENDING' }],
+  });
 });
 
 router.patch('/:userId/role', requireAdmin, async (request: AuthRequest, response) => {

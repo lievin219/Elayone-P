@@ -16,28 +16,17 @@ function issueSession(user: { id: string; name: string; email: string; role: 'ME
   return { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
-router.post('/signup', async (request, response) => {
-  const parsed = credentials.safeParse(request.body);
-  if (!parsed.success || !parsed.data.name) return response.status(400).json({ message: parsed.success ? 'Please enter your full name.' : parsed.error.issues[0].message });
-  const { name, email, password } = parsed.data;
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return response.status(409).json({ message: 'An account with that email already exists.' });
-  const passwordHash = await bcrypt.hash(password, 12);
-  const user = await prisma.$transaction(async (transaction) => {
-    const choir = await transaction.choir.upsert({ where: { id: 'elayone-main-choir' }, update: {}, create: { id: 'elayone-main-choir', name: 'Elayone Choir', description: 'A choir serving with one voice.' } });
-    const createdUser = await transaction.user.create({ data: { name, email, passwordHash } });
-    await transaction.membership.create({ data: { userId: createdUser.id, choirId: choir.id } });
-    return createdUser;
-  });
-  return response.status(201).json(issueSession(user));
+router.post('/signup', async (_request, response) => {
+  return response.status(403).json({ message: 'Member accounts are created by a choir administrator. Please ask your administrator for an account.' });
 });
 
 router.post('/login', async (request, response) => {
   const parsed = credentials.omit({ name: true }).safeParse(request.body);
   if (!parsed.success) return response.status(400).json({ message: parsed.error.issues[0].message });
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
-  const valid = user && await bcrypt.compare(parsed.data.password, user.passwordHash);
-  if (!valid || !user) return response.status(401).json({ message: 'Email or password is incorrect.' });
+  const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
+  if (!user) return response.status(404).json({ message: 'No account was found for that email. Check the address or ask your choir administrator to create an account.' });
+  const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
+  if (!valid) return response.status(401).json({ message: 'That password is incorrect. Check it and try again, or ask your choir administrator to reset it.' });
   return response.json(issueSession(user));
 });
 

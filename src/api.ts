@@ -183,12 +183,17 @@ export async function getAttendanceReport(choirId: string): Promise<AttendanceRe
   return request<AttendanceReport>(`/api/choirs/${choirId}/attendance/report`, { headers: await authHeaders() });
 }
 
-export type EventType = 'SERVICE' | 'REHEARSAL' | 'WORSHIP_NIGHT' | 'SPECIAL_EVENT';
+export type EventType = 'SERVICE' | 'REHEARSAL' | 'WORSHIP_NIGHT' | 'SPECIAL_EVENT' | 'CUSTOM';
 
 export type RehearsalRecord = {
   id: string;
   title: string;
   eventType?: EventType;
+  customEventType?: string | null;
+  eventTypeName?: string;
+  recurrenceFrequency?: 'NONE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY';
+  recurrenceIndex?: number;
+  recurrenceTotal?: number;
   location: string;
   startsAt: string;
   endsAt: string;
@@ -199,7 +204,6 @@ export type RehearsalRecord = {
   invitees?: Array<{ userId: string; name: string; status: AttendanceResponseStatus }>;
   attendances?: Array<{ id: string; status: 'YES' | 'MAYBE' | 'NO' | 'PENDING'; userId: string }>;
 };
-
 export async function getAttendanceSummary(choirId: string): Promise<AttendanceSummary> {
   return request<AttendanceSummary>(`/api/choirs/${choirId}/attendance/summary`, { headers: await authHeaders() });
 }
@@ -216,7 +220,11 @@ export async function updateUserRole(userId: string, role: Role) {
   return request<User>(`/api/users/${userId}/role`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ role }) });
 }
 
-export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string; eventType?: EventType; inviteeIds?: string[] }) {
+export async function createMemberAccount(data: { name: string; email: string; password: string }): Promise<DirectoryUser> {
+  return request<DirectoryUser>('/api/users', { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
+}
+
+export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string; eventType?: EventType; customEventType?: string; recurrenceFrequency?: 'NONE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; recurrenceCount?: number; inviteeIds?: string[] }) {
   return request<RehearsalRecord>(`/api/choirs/${choirId}/rehearsals`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }
 

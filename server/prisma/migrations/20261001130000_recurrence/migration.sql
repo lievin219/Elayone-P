@@ -1,0 +1,3 @@
+ALTER TABLE "Rehearsal" ADD COLUMN "recurrenceFrequency" TEXT NOT NULL DEFAULT 'NONE';
+ALTER TABLE "Rehearsal" ADD COLUMN "recurrenceIndex" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "Rehearsal" ADD COLUMN "recurrenceTotal" INTEGER NOT NULL DEFAULT 1;

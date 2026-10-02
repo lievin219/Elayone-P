@@ -42,6 +42,11 @@ router.get('/:choirId/rehearsals', requireChoirAccess, async (request: AuthReque
     id: event.id,
     title: event.title,
     eventType: event.eventType,
+    customEventType: event.customEventType,
+    eventTypeName: event.customEventType ?? event.eventType,
+    recurrenceFrequency: event.recurrenceFrequency,
+    recurrenceIndex: event.recurrenceIndex,
+    recurrenceTotal: event.recurrenceTotal,
     location: event.location,
     startsAt: event.startsAt,
     endsAt: event.endsAt,
@@ -106,6 +111,11 @@ router.get('/:choirId/attendance/report', requireChoirAccess, async (request: Au
         rehearsalId: rehearsal.id,
         title: rehearsal.title,
         eventType: rehearsal.eventType,
+        customEventType: rehearsal.customEventType,
+        eventTypeName: rehearsal.customEventType ?? rehearsal.eventType,
+        recurrenceFrequency: rehearsal.recurrenceFrequency,
+        recurrenceIndex: rehearsal.recurrenceIndex,
+        recurrenceTotal: rehearsal.recurrenceTotal,
         startsAt: rehearsal.startsAt.toISOString(),
         location: rehearsal.location,
         status,
@@ -143,6 +153,11 @@ router.get('/:choirId/attendance/report', requireChoirAccess, async (request: Au
       id: rehearsal.id,
       title: rehearsal.title,
       eventType: rehearsal.eventType,
+      customEventType: rehearsal.customEventType,
+      eventTypeName: rehearsal.customEventType ?? rehearsal.eventType,
+      recurrenceFrequency: rehearsal.recurrenceFrequency,
+      recurrenceIndex: rehearsal.recurrenceIndex,
+      recurrenceTotal: rehearsal.recurrenceTotal,
       startsAt: rehearsal.startsAt.toISOString(),
       location: rehearsal.location,
       totals: {
@@ -165,7 +180,7 @@ router.get('/:choirId/attendance/report', requireChoirAccess, async (request: Au
 });
 
 router.post('/:choirId/rehearsals', requireAdmin, async (request, response) => {
-  const { title, startsAt, endsAt, location, eventType, inviteeIds } = request.body;
+  const { title, startsAt, endsAt, location, eventType, customEventType, recurrenceFrequency, recurrenceCount, inviteeIds } = request.body;
   if (!title || !startsAt || !endsAt || !location) return response.status(400).json({ message: 'Title, dates, and location are required.' });
   const startDate = new Date(startsAt);
   const endDate = new Date(endsAt);
@@ -175,6 +190,15 @@ router.post('/:choirId/rehearsals', requireAdmin, async (request, response) => {
   if (inviteeIds !== undefined && (!Array.isArray(inviteeIds) || inviteeIds.length === 0 || inviteeIds.some((id) => typeof id !== 'string'))) {
     return response.status(400).json({ message: 'Select at least one choir member to invite, or omit inviteeIds for the whole choir.' });
   }
+  if (eventType === 'CUSTOM' && (!customEventType || typeof customEventType !== 'string' || !customEventType.trim())) {
+    return response.status(400).json({ message: 'Enter a name for the custom event type.' });
+  }
+  const frequencies = ['NONE', 'WEEKLY', 'BIWEEKLY', 'MONTHLY'];
+  const normalizedFrequency = frequencies.includes(recurrenceFrequency) ? recurrenceFrequency : 'NONE';
+  const count = recurrenceCount === undefined ? 1 : Number(recurrenceCount);
+  if (!Number.isInteger(count) || count < 1 || count > 52) {
+    return response.status(400).json({ message: 'Recurring events must have between 1 and 52 occurrences.' });
+  }
   const choirId = String(request.params.choirId);
   const selectedInviteeIds = inviteeIds === undefined ? [] : [...new Set(inviteeIds as string[])];
   if (selectedInviteeIds.length > 0) {
@@ -182,20 +206,40 @@ router.post('/:choirId/rehearsals', requireAdmin, async (request, response) => {
     if (memberships.length !== selectedInviteeIds.length) return response.status(400).json({ message: 'Every invitee must be an active member of this choir.' });
   }
   const normalizedType = ['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT'].includes(eventType) ? eventType : 'REHEARSAL';
+  const normalizedCustomType = eventType === 'CUSTOM' ? String(customEventType).trim().slice(0, 80) : null;
   const rehearsal = await prisma.$transaction(async (transaction) => {
-    const created = await transaction.rehearsal.create({ data: { choirId, title: String(title).trim(), eventType: normalizedType, startsAt: startDate, endsAt: endDate, location: String(location).trim() } });
-    if (selectedInviteeIds.length > 0) {
-      await transaction.eventInvitation.createMany({ data: selectedInviteeIds.map((userId) => ({ rehearsalId: created.id, userId })) });
+    let firstCreated: typeof prisma.rehearsal extends never ? never : Awaited<ReturnType<typeof transaction.rehearsal.create>> | null = null;
+    for (let index = 0; index < count; index += 1) {
+      const startsAtDate = new Date(startDate);
+      const endsAtDate = new Date(endDate);
+      if (normalizedFrequency === 'WEEKLY') {
+        startsAtDate.setDate(startsAtDate.getDate() + index * 7);
+        endsAtDate.setDate(endsAtDate.getDate() + index * 7);
+      } else if (normalizedFrequency === 'BIWEEKLY') {
+        startsAtDate.setDate(startsAtDate.getDate() + index * 14);
+        endsAtDate.setDate(endsAtDate.getDate() + index * 14);
+      } else if (normalizedFrequency === 'MONTHLY') {
+        startsAtDate.setMonth(startsAtDate.getMonth() + index);
+        endsAtDate.setMonth(endsAtDate.getMonth() + index);
+      }
+      const created = await transaction.rehearsal.create({ data: { choirId, title: String(title).trim(), eventType: normalizedType, customEventType: normalizedCustomType, recurrenceFrequency: normalizedFrequency, recurrenceIndex: index + 1, recurrenceTotal: count, startsAt: startsAtDate, endsAt: endsAtDate, location: String(location).trim() } });
+      if (!firstCreated) firstCreated = created;
+      if (selectedInviteeIds.length > 0) {
+        await transaction.eventInvitation.createMany({ data: selectedInviteeIds.map((userId) => ({ rehearsalId: created.id, userId })) });
+      }
     }
+    if (!firstCreated) throw new Error('Could not create event.');
     return {
-      ...created,
-      invitations: await transaction.eventInvitation.findMany({ where: { rehearsalId: created.id }, include: { user: { select: { id: true, name: true } } } }),
+      ...firstCreated,
+      invitations: await transaction.eventInvitation.findMany({ where: { rehearsalId: firstCreated.id }, include: { user: { select: { id: true, name: true } } } }),
     };
   });
   return response.status(201).json({
     id: rehearsal.id,
     title: rehearsal.title,
     eventType: rehearsal.eventType,
+    customEventType: rehearsal.customEventType,
+    eventTypeName: rehearsal.customEventType ?? rehearsal.eventType,
     location: rehearsal.location,
     startsAt: rehearsal.startsAt,
     endsAt: rehearsal.endsAt,

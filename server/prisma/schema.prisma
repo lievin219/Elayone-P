@@ -82,6 +82,10 @@ model Rehearsal {
   choirId       String
   title         String
   eventType     EventType      @default(REHEARSAL)
+  customEventType String?
+  recurrenceFrequency String    @default("NONE")
+  recurrenceIndex Int           @default(1)
+  recurrenceTotal Int           @default(1)
   startsAt      DateTime
   endsAt        DateTime
   location      String

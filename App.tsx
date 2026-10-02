@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
-import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, RehearsalRecord, Session, signIn, signOut, signUp, updateAttendance, updateUserRole } from './src/api';
+import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getRehearsals, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, RehearsalRecord, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
@@ -293,7 +293,14 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Calendar' ? <CalendarScreen events={orderedRehearsals} canManage={isAdmin} onRespond={async (eventId, status) => {
+          ) : activeTab === 'Calendar' ? <CalendarScreen events={orderedRehearsals} canManage={isAdmin} onRefresh={async () => {
+            const updatedEvents = await getRehearsals('elayone-main-choir');
+            setRehearsals(updatedEvents.map((event, index) => ({ ...event, color: rehearsalColors[index % rehearsalColors.length] })));
+          }} onEventCreated={(event) => {
+            const nextRehearsal: Rehearsal = { ...event, color: rehearsalColors[rehearsals.length % rehearsalColors.length] };
+            setRehearsals((current) => [...current, nextRehearsal]);
+            setSelectedRehearsal(nextRehearsal.id);
+          }} onRespond={async (eventId, status) => {
             try {
               await updateAttendance('elayone-main-choir', eventId, status);
               const updatedEvents = await getRehearsals('elayone-main-choir');
@@ -306,7 +313,7 @@ export default function App() {
             setHasNewAnnouncements(next.length > 0);
             return next;
           }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} onRehearsalAdded={(nextRehearsal) => { setRehearsals((current) => [nextRehearsal, ...current]); setSelectedRehearsal(nextRehearsal.id); }} /> : (
-            <TabView tab={activeTab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
+            <TabView tab={activeTab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onOpenCalendar={() => setActiveTab('Calendar')} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
         <View style={styles.bottomNav}>
@@ -490,11 +497,23 @@ function ReportEmpty({ text }: { text: string }) {
   return <View style={styles.reportEmpty}><Ionicons name="bar-chart-outline" size={22} color={COLORS.muted} /><Text style={styles.reportEmptyText}>{text}</Text></View>;
 }
 
-function CalendarScreen({ events, canManage, onRespond }: { events: Rehearsal[]; canManage: boolean; onRespond: (eventId: string, status: 'YES' | 'MAYBE' | 'NO') => Promise<void> }) {
+function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespond }: { events: Rehearsal[]; canManage: boolean; onRefresh: () => Promise<void>; onEventCreated: (event: RehearsalRecord) => void; onRespond: (eventId: string, status: 'YES' | 'MAYBE' | 'NO') => Promise<void> }) {
   const [viewDate, setViewDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
   const [busyEventId, setBusyEventId] = useState<string | null>(null);
   const [localResponses, setLocalResponses] = useState<Record<string, 'YES' | 'MAYBE' | 'NO'>>({});
+  const [responseNotice, setResponseNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [eventTitle, setEventTitle] = useState('');
+  const [eventLocation, setEventLocation] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [eventStartTime, setEventStartTime] = useState('');
+  const [eventEndTime, setEventEndTime] = useState('');
+  const [eventType, setEventType] = useState<EventType>('REHEARSAL');
+  const [customEventType, setCustomEventType] = useState('');
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastCheckedAt, setLastCheckedAt] = useState(() => new Date());
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const firstWeekday = new Date(year, month, 1).getDay();
@@ -511,13 +530,41 @@ function CalendarScreen({ events, canManage, onRespond }: { events: Rehearsal[];
   const dayEvents = monthEvents.filter((event) => isSameDay(event.startsAt, selectedDay));
   const upcomingEvents = events.filter((event) => new Date(event.endsAt).getTime() >= Date.now());
 
+  useEffect(() => {
+    if (!canManage) return;
+    const refreshResponses = async () => {
+      try {
+        await onRefresh();
+        setLastCheckedAt(new Date());
+      } catch {
+        // Keep the current response counts when a background refresh cannot connect.
+      }
+    };
+    const interval = setInterval(refreshResponses, 10000);
+    return () => clearInterval(interval);
+  }, [canManage, onRefresh]);
+
+  async function refreshNow() {
+    setRefreshing(true);
+    try {
+      await onRefresh();
+      setLastCheckedAt(new Date());
+    } catch (error) {
+      setResponseNotice({ type: 'error', message: error instanceof Error ? error.message : 'Could not refresh event responses.' });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function saveResponse(eventId: string, status: 'YES' | 'MAYBE' | 'NO') {
     setBusyEventId(eventId);
+    setResponseNotice(null);
     try {
       await onRespond(eventId, status);
       setLocalResponses((current) => ({ ...current, [eventId]: status }));
+      setResponseNotice({ type: 'success', message: `Your response was saved: ${status === 'YES' ? 'you accepted' : status === 'MAYBE' ? 'you marked maybe' : 'you declined'} this event.` });
     } catch (error) {
-      Alert.alert('Response not saved', error instanceof Error ? error.message : 'Please try again.');
+      setResponseNotice({ type: 'error', message: error instanceof Error ? error.message : 'We could not save your response. Please try again.' });
     } finally {
       setBusyEventId(null);
     }
@@ -529,10 +576,85 @@ function CalendarScreen({ events, canManage, onRespond }: { events: Rehearsal[];
     setSelectedDay(new Date(next.getFullYear(), next.getMonth(), 1));
   }
 
+  async function addEvent() {
+    if (!eventTitle.trim() || !eventLocation.trim() || !eventDate || !eventStartTime || !eventEndTime) {
+      setResponseNotice({ type: 'error', message: 'Add a title, location, date, start time, and end time.' });
+      return;
+    }
+    if (eventType === 'CUSTOM' && !customEventType.trim()) {
+      setResponseNotice({ type: 'error', message: 'Enter a name for the custom event type.' });
+      return;
+    }
+    const startDate = new Date(`${eventDate}T${eventStartTime}:00`);
+    const endDate = new Date(`${eventDate}T${eventEndTime}:00`);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+      setResponseNotice({ type: 'error', message: 'Choose a valid schedule, with the end time after the start time.' });
+      return;
+    }
+    setCreatingEvent(true);
+    setResponseNotice(null);
+    try {
+      const created = await createRehearsal('elayone-main-choir', {
+        title: eventTitle.trim(),
+        location: eventLocation.trim(),
+        startsAt: startDate.toISOString(),
+        endsAt: endDate.toISOString(),
+        eventType,
+        customEventType: eventType === 'CUSTOM' ? customEventType.trim() : undefined,
+      });
+      onEventCreated(created);
+      setShowCreateForm(false);
+      setEventTitle('');
+      setEventLocation('');
+      setEventDate('');
+      setEventStartTime('');
+      setEventEndTime('');
+      setEventType('REHEARSAL');
+      setCustomEventType('');
+      setResponseNotice({ type: 'success', message: 'Event added to the choir calendar.' });
+    } catch (error) {
+      setResponseNotice({ type: 'error', message: error instanceof Error ? error.message : 'We could not add this event.' });
+    } finally {
+      setCreatingEvent(false);
+    }
+  }
+
   return <View>
     <Text style={styles.pageEyebrow}>ELAYONE / SCHEDULE</Text>
     <Text style={styles.pageTitle}>Choir calendar</Text>
     <Text style={styles.pageCaption}>{canManage ? 'View scheduled events and track invite responses.' : 'Your invitations, schedule, and availability in one place.'}</Text>
+    {canManage && <View style={styles.calendarResponseHeader}>
+      <Text style={styles.calendarResponseHeaderText}>Member responses update automatically · checked {lastCheckedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+      <TouchableOpacity style={styles.calendarRefreshButton} onPress={refreshNow} disabled={refreshing} accessibilityLabel="Refresh event responses">
+        {refreshing ? <ActivityIndicator size="small" color={COLORS.ink} /> : <Ionicons name="refresh-outline" size={17} color={COLORS.ink} />}
+      </TouchableOpacity>
+    </View>}
+    {canManage && <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateForm((current) => !current)}>
+      <Ionicons name={showCreateForm ? 'close' : 'add'} size={19} color={COLORS.white} />
+      <Text style={styles.addButtonText}>{showCreateForm ? 'Cancel event' : 'Add event to calendar'}</Text>
+    </TouchableOpacity>}
+    {canManage && showCreateForm && <View style={styles.calendarCreateForm}>
+      <Text style={styles.calendarCreateTitle}>New choir event</Text>
+      <Text style={styles.calendarCreateCaption}>This event will be visible to the whole choir.</Text>
+      <Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Sunday service" />
+      <Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" />
+      <Field label="DATE" value={eventDate} onChangeText={setEventDate} placeholder="2026-10-04" />
+      <View style={styles.inlineFieldRow}>
+        <Field label="START TIME" value={eventStartTime} onChangeText={setEventStartTime} placeholder="18:00" />
+        <Field label="END TIME" value={eventEndTime} onChangeText={setEventEndTime} placeholder="20:00" />
+      </View>
+      <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>EVENT TYPE</Text>
+      <View style={styles.priorityRow}>
+        {(['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT', 'CUSTOM'] as const).map((option) => <TouchableOpacity key={option} style={[styles.priorityOption, eventType === option && styles.priorityOptionActive]} onPress={() => setEventType(option)} accessibilityRole="button" accessibilityState={{ selected: eventType === option }} accessibilityLabel={`Event type ${option.replace('_', ' ')}`}>
+          <Text style={[styles.priorityText, eventType === option && styles.priorityTextActive]}>{option.replace('_', ' ')}</Text>
+        </TouchableOpacity>)}
+      </View>
+      {eventType === 'CUSTOM' && <Field label="CUSTOM EVENT TYPE" value={customEventType} onChangeText={setCustomEventType} placeholder="Choir retreat" />}
+      <TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={creatingEvent}>
+        <Text style={styles.adminButtonText}>{creatingEvent ? 'Adding event...' : 'Save event'}</Text>
+      </TouchableOpacity>
+    </View>}
+    {responseNotice && <View style={[styles.noticeBanner, responseNotice.type === 'success' ? styles.noticeSuccess : styles.noticeError]}><Text style={[styles.noticeText, responseNotice.type === 'success' ? styles.noticeTextSuccess : styles.noticeTextError]}>{responseNotice.message}</Text></View>}
 
     <View style={styles.calendarCard}>
       <View style={styles.calendarMonthHeader}>
@@ -575,7 +697,7 @@ function CalendarEventCard({ event, canManage, response, busy, onRespond }: { ev
       <View style={{ flex: 1 }}>
         <Text style={styles.calendarEventTitle}>{event.title}</Text>
         <Text style={styles.calendarEventMeta}>{new Date(event.startsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–{new Date(event.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {event.location}</Text>
-        <Text style={styles.calendarEventType}>{(event.eventType ?? 'REHEARSAL').replace('_', ' ')}{event.invitationOnly ? ' · PERSONAL INVITE' : ' · WHOLE CHOIR'}</Text>
+        <Text style={styles.calendarEventType}>{(event.eventTypeName ?? event.eventType ?? 'REHEARSAL').replace('_', ' ')}{event.invitationOnly ? ' · PERSONAL INVITE' : ' · WHOLE CHOIR'}</Text>
       </View>
       <View style={[styles.reportPill, responseStyle]}><Text style={styles.reportPillText}>{labels[response]}</Text></View>
     </View>
@@ -594,12 +716,18 @@ function CalendarEventCard({ event, canManage, response, busy, onRespond }: { ev
 }
 
 function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDeleted, onSongAdded, onRehearsalAdded }: { announcements: AnnouncementItem[]; onAnnouncementPublished: (announcement: AnnouncementItem) => void; onAnnouncementDeleted: (id: string) => void; onSongAdded: (song: SongItem) => void; onRehearsalAdded: (rehearsal: Rehearsal) => void }) {
+  const [memberName, setMemberName] = useState('');
+  const [memberEmail, setMemberEmail] = useState('');
+  const [memberPassword, setMemberPassword] = useState('');
   const [eventTitle, setEventTitle] = useState('');
   const [eventLocation, setEventLocation] = useState('');
   const [eventDate, setEventDate] = useState('');
   const [eventStartTime, setEventStartTime] = useState('');
   const [eventEndTime, setEventEndTime] = useState('');
-  const [eventType, setEventType] = useState<'SERVICE' | 'REHEARSAL' | 'WORSHIP_NIGHT' | 'SPECIAL_EVENT'>('REHEARSAL');
+  const [eventType, setEventType] = useState<EventType>('REHEARSAL');
+  const [customEventType, setCustomEventType] = useState('');
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<'NONE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'>('NONE');
+  const [recurrenceCount, setRecurrenceCount] = useState('1');
   const [inviteMode, setInviteMode] = useState<'ALL' | 'SELECTED'>('ALL');
   const [selectedInviteeIds, setSelectedInviteeIds] = useState<string[]>([]);
   const [newsTitle, setNewsTitle] = useState('');
@@ -621,9 +749,36 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
     getAllUsers().then(setUsers).catch(() => undefined).finally(() => setUsersLoading(false));
   }, []);
 
+  async function createMember() {
+    if (memberName.trim().length < 2) return setNotice({ type: 'error', text: 'Please enter the member’s full name (at least 2 characters).' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memberEmail.trim())) return setNotice({ type: 'error', text: 'Please enter a valid email address for the member.' });
+    if (memberPassword.length < 8) return setNotice({ type: 'error', text: 'The temporary password must be at least 8 characters.' });
+    setBusy(true);
+    setNotice(null);
+    try {
+      const createdUser = await createMemberAccount({ name: memberName.trim(), email: memberEmail.trim(), password: memberPassword });
+      setUsers((current) => [createdUser, ...current]);
+      setMemberName('');
+      setMemberEmail('');
+      setMemberPassword('');
+      setNotice({ type: 'success', text: `Account created for ${createdUser.name}. Share the temporary password with them securely.` });
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'We could not create the account. Please try again.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function addEvent() {
     if (!eventTitle || !eventLocation || !eventDate || !eventStartTime || !eventEndTime) {
       return Alert.alert('Missing rehearsal details', 'Add the title, date, start time, end time, and location before saving.');
+    }
+    if (eventType === 'CUSTOM' && !customEventType.trim()) {
+      return Alert.alert('Missing event type', 'Enter a name for the custom event type before saving.');
+    }
+    const parsedRecurrenceCount = Number(recurrenceCount);
+    if (!Number.isInteger(parsedRecurrenceCount) || parsedRecurrenceCount < 1 || parsedRecurrenceCount > 52) {
+      return Alert.alert('Invalid recurrence', 'Choose between 1 and 52 occurrences.');
     }
     const startDate = new Date(`${eventDate}T${eventStartTime}:00`);
     const endDate = new Date(`${eventDate}T${eventEndTime}:00`);
@@ -641,6 +796,9 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
         startsAt: startDate.toISOString(),
         endsAt: endDate.toISOString(),
         eventType,
+        customEventType: eventType === 'CUSTOM' ? customEventType.trim() : undefined,
+        recurrenceFrequency,
+        recurrenceCount: recurrenceFrequency === 'NONE' ? 1 : parsedRecurrenceCount,
         inviteeIds: inviteMode === 'SELECTED' ? selectedInviteeIds : undefined,
       });
       const nextRehearsal: Rehearsal = { ...created, color: rehearsalColors[0] };
@@ -651,12 +809,15 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       setEventStartTime('');
       setEventEndTime('');
       setEventType('REHEARSAL');
+      setCustomEventType('');
+      setRecurrenceFrequency('NONE');
+      setRecurrenceCount('1');
       setInviteMode('ALL');
       setSelectedInviteeIds([]);
-      setNotice({ type: 'success', text: 'Event added successfully and is now visible to the choir.' });
-      Alert.alert('Event added', 'The choir can now see this schedule item.');
+      setNotice({ type: 'success', text: inviteMode === 'SELECTED' ? `Invitation sent to ${selectedInviteeIds.length} choir member${selectedInviteeIds.length === 1 ? '' : 's'}.` : 'Event added successfully and is now visible to the whole choir.' });
+      Alert.alert('Event scheduled', inviteMode === 'SELECTED' ? `Invitations sent to ${selectedInviteeIds.length} choir member${selectedInviteeIds.length === 1 ? '' : 's'}.` : 'The event is now visible to the whole choir.');
     } catch (error) {
-      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Unable to add the rehearsal right now.' });
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'We could not schedule the event. Please try again.' });
       Alert.alert('Could not add event', error instanceof Error ? error.message : 'Try again.');
     } finally {
       setBusy(false);
@@ -748,6 +909,19 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
     }
   }
 
+  async function refreshUsers() {
+    setUsersLoading(true);
+    try {
+      const refreshedUsers = await getAllUsers();
+      setUsers(refreshedUsers);
+      setNotice({ type: 'success', text: 'Member list is up to date.' });
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'We could not refresh the member list. Please try again.' });
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
   return (
     <View>
       <Text style={styles.pageEyebrow}>ELAYONE / ADMIN</Text>
@@ -772,7 +946,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
         <View style={styles.directoryHeader}>
           <Text style={styles.directoryCount}>{users.length}</Text>
           <Text style={styles.directoryLabel}>accounts</Text>
-          <TouchableOpacity onPress={() => { setUsersLoading(true); getAllUsers().then(setUsers).finally(() => setUsersLoading(false)); }}>
+          <TouchableOpacity onPress={refreshUsers} accessibilityLabel="Refresh member list">
             <Ionicons name="refresh-outline" size={19} color={COLORS.ink} />
           </TouchableOpacity>
         </View>
@@ -812,6 +986,16 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
         })}
       </AdminForm>
 
+      <AdminForm title="Create a member account" icon="person-add-outline">
+        <Text style={styles.adminHelp}>Accounts are created by the choir admin. Give the member their sign-in details securely.</Text>
+        <Field label="MEMBER FULL NAME" value={memberName} onChangeText={setMemberName} placeholder="Full name" autoCapitalize="words" />
+        <Field label="MEMBER EMAIL" value={memberEmail} onChangeText={setMemberEmail} placeholder="member@example.com" keyboardType="email-address" autoCapitalize="none" />
+        <Field label="TEMPORARY PASSWORD" value={memberPassword} onChangeText={setMemberPassword} placeholder="At least 8 characters" secureTextEntry />
+        <TouchableOpacity style={styles.adminButton} onPress={createMember} disabled={busy}>
+          <Text style={styles.adminButtonText}>{busy ? 'Creating account…' : 'Create member account'}</Text>
+        </TouchableOpacity>
+      </AdminForm>
+
       <AdminForm title="Plan a service or rehearsal" icon="calendar-outline">
         <Field label="EVENT TITLE" value={eventTitle} onChangeText={setEventTitle} placeholder="Sunday service set" />
         <Field label="LOCATION" value={eventLocation} onChangeText={setEventLocation} placeholder="Main sanctuary" />
@@ -824,16 +1008,27 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
         </View>
         <Text style={[styles.fieldLabel, { marginBottom: 8 }]}>EVENT TYPE</Text>
         <View style={styles.priorityRow}>
-          {(['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT'] as const).map((option) => (
+          {(['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT', 'CUSTOM'] as const).map((option) => (
             <TouchableOpacity
               key={option}
               style={[styles.priorityOption, eventType === option && styles.priorityOptionActive]}
               onPress={() => setEventType(option)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: eventType === option }}
+              accessibilityLabel={`Event type ${option.replace('_', ' ')}`}
             >
               <Text style={[styles.priorityText, eventType === option && styles.priorityTextActive]}>{option.replace('_', ' ')}</Text>
             </TouchableOpacity>
           ))}
         </View>
+        {eventType === 'CUSTOM' && <Field label="CUSTOM EVENT TYPE" value={customEventType} onChangeText={setCustomEventType} placeholder="Choir retreat" />}
+        <Text style={[styles.fieldLabel, { marginTop: 5, marginBottom: 8 }]}>REPEAT EVENT</Text>
+        <View style={styles.priorityRow}>
+          {([{ value: 'NONE', label: 'Does not repeat' }, { value: 'WEEKLY', label: 'Every week' }, { value: 'BIWEEKLY', label: 'Every 2 weeks' }, { value: 'MONTHLY', label: 'Every month' }] as const).map((option) => <TouchableOpacity key={option.value} style={[styles.priorityOption, recurrenceFrequency === option.value && styles.priorityOptionActive]} onPress={() => setRecurrenceFrequency(option.value)}>
+            <Text style={[styles.priorityText, recurrenceFrequency === option.value && styles.priorityTextActive]}>{option.label}</Text>
+          </TouchableOpacity>)}
+        </View>
+        {recurrenceFrequency !== 'NONE' && <Field label="NUMBER OF OCCURRENCES (1-52)" value={recurrenceCount} onChangeText={setRecurrenceCount} placeholder="4" keyboardType="number-pad" />}
         <Text style={[styles.fieldLabel, { marginTop: 5, marginBottom: 8 }]}>WHO SHOULD RECEIVE THIS EVENT?</Text>
         <View style={styles.priorityRow}>
           {([{ id: 'ALL', label: 'Whole choir' }, { id: 'SELECTED', label: 'Choose members' }] as const).map((option) => (
@@ -926,8 +1121,6 @@ function AdminForm({ title, icon, children }: { title: string; icon: IconName; c
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) => void }) {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -937,7 +1130,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
     setError('');
     setBusy(true);
     try {
-      const session = mode === 'login' ? await signIn(email, password) : await signUp(name, email, password);
+      const session = await signIn(email.trim(), password);
       onAuthenticated(session);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to connect right now.');
@@ -955,18 +1148,15 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
           <Text style={styles.authBrand}>ELAYONE MUSIC</Text>
           <Text style={styles.authBrandSub}>GOSPEL MUSIC MINISTRY</Text>
           <View style={styles.authRule} />
-          <Text style={styles.authTitle}>{mode === 'login' ? 'Welcome back.' : 'Join the choir.'}</Text>
-          <Text style={styles.authCaption}>{mode === 'login' ? 'Sign in to stay in rhythm with your ministry.' : 'Create your member account and serve with one voice.'}</Text>
-          {mode === 'signup' && <Field label="FULL NAME" value={name} onChangeText={setName} placeholder="Your name" />}
+          <Text style={styles.authTitle}>Welcome back.</Text>
+          <Text style={styles.authCaption}>Sign in to stay in rhythm with your ministry.</Text>
           <Field label="EMAIL ADDRESS" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" />
           <Field label="PASSWORD" value={password} onChangeText={setPassword} placeholder="At least 8 characters" secureTextEntry />
           {error ? <Text style={styles.authError}>{error}</Text> : null}
           <TouchableOpacity style={styles.authButton} onPress={submit} disabled={busy}>
-            {busy ? <ActivityIndicator color={COLORS.white} /> : <><Text style={styles.authButtonText}>{mode === 'login' ? 'Sign in' : 'Create account'}</Text><Ionicons name="arrow-forward" size={17} color={COLORS.white} /></>}
+            {busy ? <ActivityIndicator color={COLORS.white} /> : <><Text style={styles.authButtonText}>Sign in</Text><Ionicons name="arrow-forward" size={17} color={COLORS.white} /></>}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.authSwitch} onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>
-            <Text style={styles.authSwitchText}>{mode === 'login' ? 'New to Elayone? ' : 'Already have an account? '}<Text style={styles.authSwitchStrong}>{mode === 'login' ? 'Create an account' : 'Sign in'}</Text></Text>
-          </TouchableOpacity>
+          <Text style={styles.authAccountHelp}>Need an account or password reset? Please contact your choir administrator.</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -981,9 +1171,9 @@ function QuickAction({ icon, label, onPress }: { icon: IconName; label: string; 
   return <TouchableOpacity style={styles.quickAction} onPress={onPress}><View style={styles.quickIcon}><Ionicons name={icon} size={20} color={COLORS.ink} /></View><Text style={styles.quickLabel}>{label}</Text><Ionicons name="arrow-forward" size={15} color={COLORS.muted} /></TouchableOpacity>;
 }
 
-function TabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
+function TabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onOpenCalendar, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onOpenCalendar: () => void; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
   const selected = rehearsals.find((rehearsal) => rehearsal.id === selectedRehearsal) ?? rehearsals[0] ?? null;
-  return <><BaseTabView tab={tab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onRemovePerson={onRemovePerson} songList={songList} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selected} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
+  return <><BaseTabView tab={tab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={peopleList} canManage={canManage} onOpenCalendar={onOpenCalendar} onRemovePerson={onRemovePerson} songList={songList} />{tab === 'Rehearsals' && <AttendanceRoster rehearsal={selected} />}{tab === 'People' && <><AvailabilitySummary />{canManage && <AdminMemberList peopleList={peopleList} onRemovePerson={onRemovePerson} />}</>}</>;
 }
 
 function AttendanceRoster({ rehearsal }: { rehearsal: Rehearsal | null }) {
@@ -1008,7 +1198,7 @@ function AdminMemberList({ peopleList, onRemovePerson }: { peopleList: typeof pe
   return <View style={styles.adminMembers}><Text style={styles.adminMembersTitle}>MANAGE MEMBERS</Text>{peopleList.map((person) => <View key={person.id} style={styles.adminMemberRow}><View style={styles.personInfo}><Text style={styles.personName}>{person.name}</Text><Text style={styles.personRole}>{person.part} · {person.role}</Text></View><TouchableOpacity style={styles.removeIconButton} onPress={() => removePerson(person)} accessibilityLabel={`Remove ${person.name}`}><Ionicons name="person-remove-outline" size={17} color={COLORS.clay} /></TouchableOpacity></View>)}</View>;
 }
 
-function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
+function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal, peopleList, canManage, onOpenCalendar, onRemovePerson, songList }: { tab: Tab; rehearsals: Rehearsal[]; selectedRehearsal: string; setSelectedRehearsal: (value: string) => void; peopleList: typeof people; canManage: boolean; onOpenCalendar: () => void; onRemovePerson: (id: string) => void; songList: SongItem[] }) {
   const heading = tab === 'Rehearsals' ? 'Rehearsals' : tab === 'People' ? 'The choir' : 'Song library';
   const caption = tab === 'Rehearsals' ? 'A prepared choir is a present choir.' : tab === 'People' ? '24 voices, one offering.' : 'Songs we carry together.';
   const [activeSong, setActiveSong] = useState<string | null>(null);
@@ -1073,7 +1263,7 @@ function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal,
 
       {tab === 'Rehearsals' && (
         <>
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity style={styles.addButton} onPress={onOpenCalendar}>
             <Ionicons name="add" size={19} color={COLORS.white} />
             <Text style={styles.addButtonText}>Add rehearsal</Text>
           </TouchableOpacity>
@@ -1274,7 +1464,13 @@ const styles = StyleSheet.create({
   inviteeRow: { flexDirection: 'row', alignItems: 'center', gap: 9, borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 9 },
   inviteeName: { color: COLORS.ink, fontSize: 11, fontWeight: '700' },
   inviteeMeta: { color: COLORS.muted, fontSize: 9, marginTop: 3 },
+  calendarResponseHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  calendarResponseHeaderText: { flex: 1, color: COLORS.muted, fontSize: 9, lineHeight: 14 },
+  calendarRefreshButton: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, alignItems: 'center', justifyContent: 'center' },
   calendarCard: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 5, padding: 14, marginBottom: 24 },
+  calendarCreateForm: { backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 5, padding: 14, marginBottom: 16 },
+  calendarCreateTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 18, marginBottom: 4 },
+  calendarCreateCaption: { color: COLORS.muted, fontSize: 10, lineHeight: 15, marginBottom: 16 },
   calendarMonthHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   calendarArrow: { width: 32, height: 32, borderRadius: 16, backgroundColor: COLORS.paper, alignItems: 'center', justifyContent: 'center' },
   calendarMonthTitle: { color: COLORS.ink, fontFamily: 'Georgia', fontSize: 19 },
@@ -1332,6 +1528,7 @@ const styles = StyleSheet.create({
   authSwitch: { alignItems: 'center', marginTop: 22 },
   authSwitchText: { color: COLORS.muted, fontSize: 12 },
   authSwitchStrong: { color: COLORS.ink, fontWeight: '800' },
+  authAccountHelp: { color: COLORS.muted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 18 },
   adminNotice: { backgroundColor: '#eef2ec', borderRadius: 4, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 17 },
   adminNoticeTitle: { color: COLORS.ink, fontSize: 12, fontWeight: '800' },
   adminNoticeText: { color: COLORS.muted, fontSize: 10, marginTop: 3 },
