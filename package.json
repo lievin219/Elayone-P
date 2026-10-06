@@ -21,8 +21,10 @@
     "server:typecheck": "npm --prefix server run build"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
     "@expo/vector-icons": "^15.1.1",
     "babel-preset-expo": "~57.0.0",
+    "capacitor": "^0.5.6",
     "expo": "^57.0.0",
     "expo-asset": "~57.0.16",
     "expo-av": "^16.0.8",
