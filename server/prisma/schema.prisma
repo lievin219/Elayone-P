@@ -94,6 +94,7 @@ model Rehearsal {
   assignments   Assignment[]
   announcements Announcement[]
   invitations  EventInvitation[]
+  eventSongs   EventSong[]
   createdAt     DateTime       @default(now())
 }
 
@@ -155,7 +156,20 @@ model Song {
   notes      String?
   previewUrl String?
   choir      Choir    @relation(fields: [choirId], references: [id], onDelete: Cascade)
+  eventSongs EventSong[]
   createdAt  DateTime @default(now())
+}
+
+model EventSong {
+  id          String    @id @default(cuid())
+  rehearsalId String
+  songId      String
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  song        Song      @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([rehearsalId, songId])
 }
 model Artist{
   id String @id @default(cuid())

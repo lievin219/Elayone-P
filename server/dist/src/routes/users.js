@@ -81,12 +81,34 @@ router.patch('/:userId/role', auth_1.requireAdmin, async (request, response) => 
 });
 router.patch('/:userId/password', auth_1.requireAdmin, async (request, response) => {
     const password = typeof request.body?.password === 'string' ? request.body.password : '';
-    if (password.length < 8)
-        return response.status(400).json({ message: 'The new password must be at least 8 characters.' });
+    if (password.length < 12)
+        return response.status(400).json({ message: 'The new password must be at least 12 characters long and include a number and a symbol.' });
     const targetUser = await prisma_1.prisma.user.findUnique({ where: { id: String(request.params.userId) }, select: { id: true, name: true } });
     if (!targetUser)
         return response.status(404).json({ message: 'User not found.' });
     await prisma_1.prisma.user.update({ where: { id: targetUser.id }, data: { passwordHash: await bcryptjs_1.default.hash(password, 12) } });
     return response.json({ message: `Password reset for ${targetUser.name}.` });
+});
+router.patch('/:userId/password/self', async (request, response) => {
+    const { currentPassword, newPassword } = request.body ?? {};
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+        return response.status(400).json({ message: 'Current password and new password are required.' });
+    }
+    if (newPassword.length < 8)
+        return response.status(400).json({ message: 'The new password must be at least 8 characters.' });
+    const targetUser = await prisma_1.prisma.user.findUnique({
+        where: { id: String(request.params.userId) },
+        select: { id: true, name: true, passwordHash: true },
+    });
+    if (!targetUser)
+        return response.status(404).json({ message: 'User not found.' });
+    const valid = targetUser.passwordHash ? await bcryptjs_1.default.compare(currentPassword, targetUser.passwordHash) : false;
+    if (!valid)
+        return response.status(401).json({ message: 'The current password is incorrect.' });
+    await prisma_1.prisma.user.update({
+        where: { id: targetUser.id },
+        data: { passwordHash: await bcryptjs_1.default.hash(newPassword, 12) },
+    });
+    return response.json({ message: `Your password has been updated successfully.` });
 });
 exports.default = router;

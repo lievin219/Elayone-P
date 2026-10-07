@@ -30,6 +30,16 @@ const uploadMedia = (request, response, next) => {
         return next();
     });
 };
+function serializeEventSongs(eventSongs) {
+    return eventSongs.map((entry) => ({
+        id: entry.song.id,
+        title: entry.song.title,
+        key: entry.song.key,
+        status: entry.song.status,
+        sortOrder: entry.sortOrder,
+    }));
+}
+const eventSongInclude = { orderBy: { sortOrder: 'asc' }, include: { song: { select: { id: true, title: true, key: true, status: true } } } };
 router.get('/me', async (request, response) => {
     const memberships = await prisma_1.prisma.membership.findMany({ where: { userId: request.userId }, include: { choir: true } });
     return response.json(memberships);
@@ -53,6 +63,7 @@ router.get('/:choirId/rehearsals', auth_1.requireChoirAccess, async (request, re
         include: {
             attendances: { select: { userId: true, status: true } },
             invitations: { include: { user: { select: { id: true, name: true } } } },
+            eventSongs: eventSongInclude,
         },
     });
     const choirMembers = canManage ? await prisma_1.prisma.membership.findMany({
@@ -78,6 +89,7 @@ router.get('/:choirId/rehearsals', auth_1.requireChoirAccess, async (request, re
         invited: event.invitations.length === 0 || event.invitations.some((invitation) => invitation.userId === userId),
         myStatus: event.attendances.find((attendance) => attendance.userId === userId)?.status ?? 'PENDING',
         confirmedCount: event.attendances.filter((attendance) => attendance.status === 'YES').length,
+        songs: serializeEventSongs(event.eventSongs),
         invitees: canManage ? (event.invitations.length > 0
             ? event.invitations.map((invitation) => ({ userId: invitation.userId, name: invitation.user.name }))
             : choirMembers.map((member) => ({ userId: member.user.id, name: member.user.name }))).map((invitee) => ({
@@ -198,7 +210,7 @@ router.get('/:choirId/attendance/report', auth_1.requireChoirAccess, async (requ
     });
 });
 router.post('/:choirId/rehearsals', auth_1.requireAdmin, async (request, response) => {
-    const { title, startsAt, endsAt, location, eventType, customEventType, recurrenceFrequency, recurrenceCount, inviteeIds } = request.body;
+    const { title, startsAt, endsAt, location, eventType, customEventType, recurrenceFrequency, recurrenceCount, inviteeIds, songIds } = request.body;
     if (!title || !startsAt || !endsAt || !location)
         return response.status(400).json({ message: 'Title, dates, and location are required.' });
     const startDate = new Date(startsAt);
@@ -208,6 +220,9 @@ router.post('/:choirId/rehearsals', auth_1.requireAdmin, async (request, respons
     }
     if (inviteeIds !== undefined && (!Array.isArray(inviteeIds) || inviteeIds.length === 0 || inviteeIds.some((id) => typeof id !== 'string'))) {
         return response.status(400).json({ message: 'Select at least one choir member to invite, or omit inviteeIds for the whole choir.' });
+    }
+    if (songIds !== undefined && (!Array.isArray(songIds) || songIds.some((id) => typeof id !== 'string'))) {
+        return response.status(400).json({ message: 'Choose songs from the choir library, or omit songIds to create the event without a setlist.' });
     }
     if (eventType === 'CUSTOM' && (!customEventType || typeof customEventType !== 'string' || !customEventType.trim())) {
         return response.status(400).json({ message: 'Enter a name for the custom event type.' });
@@ -220,10 +235,16 @@ router.post('/:choirId/rehearsals', auth_1.requireAdmin, async (request, respons
     }
     const choirId = String(request.params.choirId);
     const selectedInviteeIds = inviteeIds === undefined ? [] : [...new Set(inviteeIds)];
+    const selectedSongIds = songIds === undefined ? [] : [...new Set(songIds)];
     if (selectedInviteeIds.length > 0) {
         const memberships = await prisma_1.prisma.membership.findMany({ where: { choirId, userId: { in: selectedInviteeIds } }, select: { userId: true } });
         if (memberships.length !== selectedInviteeIds.length)
             return response.status(400).json({ message: 'Every invitee must be an active member of this choir.' });
+    }
+    if (selectedSongIds.length > 0) {
+        const choirSongs = await prisma_1.prisma.song.findMany({ where: { choirId, id: { in: selectedSongIds } }, select: { id: true } });
+        if (choirSongs.length !== selectedSongIds.length)
+            return response.status(400).json({ message: 'Every selected song must belong to this choir’s library.' });
     }
     const normalizedType = ['SERVICE', 'REHEARSAL', 'WORSHIP_NIGHT', 'SPECIAL_EVENT'].includes(eventType) ? eventType : 'REHEARSAL';
     const normalizedCustomType = eventType === 'CUSTOM' ? String(customEventType).trim().slice(0, 80) : null;
@@ -250,12 +271,16 @@ router.post('/:choirId/rehearsals', auth_1.requireAdmin, async (request, respons
             if (selectedInviteeIds.length > 0) {
                 await transaction.eventInvitation.createMany({ data: selectedInviteeIds.map((userId) => ({ rehearsalId: created.id, userId })) });
             }
+            if (selectedSongIds.length > 0) {
+                await transaction.eventSong.createMany({ data: selectedSongIds.map((songId, songIndex) => ({ rehearsalId: created.id, songId, sortOrder: songIndex })) });
+            }
         }
         if (!firstCreated)
             throw new Error('Could not create event.');
         return {
             ...firstCreated,
             invitations: await transaction.eventInvitation.findMany({ where: { rehearsalId: firstCreated.id }, include: { user: { select: { id: true, name: true } } } }),
+            eventSongs: await transaction.eventSong.findMany({ where: { rehearsalId: firstCreated.id }, ...eventSongInclude }),
         };
     });
     return response.status(201).json({
@@ -271,6 +296,7 @@ router.post('/:choirId/rehearsals', auth_1.requireAdmin, async (request, respons
         invited: true,
         myStatus: 'PENDING',
         confirmedCount: 0,
+        songs: serializeEventSongs(rehearsal.eventSongs),
         invitees: rehearsal.invitations.map((invitation) => ({ userId: invitation.userId, name: invitation.user.name, status: 'PENDING' })),
     });
 });

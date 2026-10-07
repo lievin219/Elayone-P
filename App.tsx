@@ -18,10 +18,10 @@ import {
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, deleteSong, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getChoirPeople, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, resetUserPassword, Session, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
+import { AttendanceReport, AttendanceResponseStatus, AttendanceSummary, changeMyPassword, createMemberAccount, createRehearsal, createSong, deleteAnnouncement, deleteSong, DirectoryUser, EventType, getAllUsers, getAttendanceReport, getAttendanceSummary, getChoirPeople, getRehearsals, getReminders, getSongs, getStoredSession, publishAnnouncement, removeChoirMember, ReminderRecord, RehearsalRecord, resetUserPassword, Session, setMemberPassword, signIn, signOut, updateAttendance, updateUserRole } from './src/api';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
-type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Admin';
+type Tab = 'Home' | 'Calendar' | 'Rehearsals' | 'People' | 'Songs' | 'Reports' | 'Member' | 'Admin';
 
 type Rehearsal = RehearsalRecord & { color: string };
 type PersonItem = { id: string; name: string; role: string; initials: string; tone: string; part: string; availability: 'YES' | 'MAYBE' | 'NO' | 'PENDING' };
@@ -303,6 +303,9 @@ export default function App() {
                 </View>
                 <Text style={styles.rehearsalTitle}>{nextRehearsal?.title ?? 'No rehearsals scheduled yet'}</Text>
                 <Text style={[styles.cardEyebrow, { marginTop: 8, marginBottom: 0 }]}> {eventTypeLabel}</Text>
+                {nextRehearsal?.songs && nextRehearsal.songs.length > 0 ? (
+                  <Text style={styles.eventSongSummary}>{nextRehearsal.songs.length} song{nextRehearsal.songs.length === 1 ? '' : 's'} · {nextRehearsal.songs.map((song) => song.title).join(' · ')}</Text>
+                ) : null}
                 <View style={styles.detailRow}>
                   <Ionicons name="time-outline" size={16} color={COLORS.muted} />
                   <Text style={styles.detailText}>{nextRehearsal ? `${nextRehearsalParts?.start ?? ''} - ${new Date(nextRehearsal.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Add a rehearsal'}</Text>
@@ -339,7 +342,7 @@ export default function App() {
                 <QuickAction icon="chatbubble-ellipses-outline" label="Send update" onPress={() => setCheckedIn(true)} />
               </View>
             </>
-          ) : activeTab === 'Calendar' ? <CalendarScreen events={orderedRehearsals} canManage={isAdmin} onRefresh={async () => {
+          ) : activeTab === 'Calendar' ? <CalendarScreen events={orderedRehearsals} songs={songs} canManage={isAdmin} onRefresh={async () => {
             const updatedEvents = await getRehearsals('elayone-main-choir');
             setRehearsals(updatedEvents.map((event, index) => ({ ...event, color: rehearsalColors[index % rehearsalColors.length] })));
           }} onEventCreated={(event) => {
@@ -358,13 +361,13 @@ export default function App() {
             const next = current.filter((announcement) => announcement.id !== id);
             setHasNewAnnouncements(next.length > 0);
             return next;
-          }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} onSongDeleted={(id) => setSongs((current) => current.filter((song) => song.id !== id))} songs={songs} onRehearsalAdded={(nextRehearsal) => { setRehearsals((current) => [nextRehearsal, ...current]); setSelectedRehearsal(nextRehearsal.id); }} /> : (
+          }); }} onSongAdded={(nextSong) => setSongs((current) => [nextSong, ...current])} onSongDeleted={(id) => setSongs((current) => current.filter((song) => song.id !== id))} songs={songs} onRehearsalAdded={(nextRehearsal) => { setRehearsals((current) => [nextRehearsal, ...current]); setSelectedRehearsal(nextRehearsal.id); }} /> : activeTab === 'Member' ? <MemberPanel memberName={welcomeName} email={session?.user.email ?? ''} memberUserId={session?.user.id ?? ''} /> : (
             <TabView tab={activeTab} rehearsals={rehearsals} selectedRehearsal={selectedRehearsal} setSelectedRehearsal={setSelectedRehearsal} peopleList={visiblePeople} canManage={isAdmin} onOpenCalendar={() => setActiveTab('Calendar')} onRemovePerson={(id) => setVisiblePeople((current) => current.filter((person) => person.id !== id))} songList={songs} />
           )}
         </ScrollView>
         <View style={[styles.bottomNav, isDesktop && styles.desktopNav]}>
-          {(['Home', 'Calendar', 'People', 'Songs', 'Reports', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
-            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Calendar' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : tab === 'Reports' ? 'stats-chart-outline' : 'shield-checkmark-outline';
+          {(['Home', 'Calendar', 'People', 'Songs', 'Reports', 'Member', ...(isAdmin ? ['Admin' as Tab] : [])] as Tab[]).map((tab) => {
+            const icon: IconName = tab === 'Home' ? 'home-outline' : tab === 'Calendar' ? 'calendar-outline' : tab === 'People' ? 'people-outline' : tab === 'Songs' ? 'musical-notes-outline' : tab === 'Reports' ? 'stats-chart-outline' : tab === 'Member' ? 'person-outline' : 'shield-checkmark-outline';
             const active = activeTab === tab;
             return <TouchableOpacity key={tab} style={[styles.navItem, isDesktop && styles.desktopNavItem]} onPress={() => setActiveTab(tab)}><View style={[styles.navIconWrap, active && styles.navIconActive]}><Ionicons name={icon} size={21} color={active ? COLORS.white : COLORS.muted} /></View><Text style={[styles.navLabel, isDesktop && styles.desktopNavLabel, active && styles.navLabelActive]}>{tab}</Text></TouchableOpacity>;
           })}
@@ -542,7 +545,46 @@ function ReportEmpty({ text }: { text: string }) {
   return <View style={styles.reportEmpty}><Ionicons name="bar-chart-outline" size={22} color={COLORS.muted} /><Text style={styles.reportEmptyText}>{text}</Text></View>;
 }
 
-function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespond }: { events: Rehearsal[]; canManage: boolean; onRefresh: () => Promise<void>; onEventCreated: (event: RehearsalRecord) => void; onRespond: (eventId: string, status: 'YES' | 'MAYBE' | 'NO') => Promise<void> }) {
+function EventSongPicker({ songs, selectedSongIds, onChange }: { songs: SongItem[]; selectedSongIds: string[]; onChange: (ids: string[]) => void }) {
+  const librarySongs = songs.filter((song): song is SongItem & { id: string } => Boolean(song.id));
+  function toggleSong(songId: string) {
+    onChange(selectedSongIds.includes(songId) ? selectedSongIds.filter((id) => id !== songId) : [...selectedSongIds, songId]);
+  }
+  return (
+    <View style={styles.inviteePicker}>
+      <Text style={styles.inviteePickerCaption}>{selectedSongIds.length} song{selectedSongIds.length === 1 ? '' : 's'} selected · choose as many as this event needs, in the order you tap them</Text>
+      {librarySongs.length === 0 ? (
+        <Text style={styles.adminHelp}>Add songs in Manage songs first, then attach them here.</Text>
+      ) : librarySongs.map((song) => {
+        const selected = selectedSongIds.includes(song.id);
+        const order = selected ? selectedSongIds.indexOf(song.id) + 1 : null;
+        return (
+          <TouchableOpacity key={song.id} style={styles.inviteeRow} onPress={() => toggleSong(song.id)} accessibilityRole="checkbox" accessibilityState={{ checked: selected }}>
+            <Ionicons name={selected ? 'checkbox' : 'square-outline'} size={20} color={selected ? COLORS.olive : COLORS.muted} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inviteeName}>{order ? `${order}. ${song.title}` : song.title}</Text>
+              <Text style={styles.inviteeMeta}>{song.status} · {song.key ?? 'No key'}</Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function EventSongSetlist({ songs }: { songs?: Array<{ id: string; title: string; key?: string | null }> }) {
+  if (!songs || songs.length === 0) return null;
+  return (
+    <View style={styles.eventSongList}>
+      <Text style={styles.eventSongListLabel}>{songs.length} song{songs.length === 1 ? '' : 's'} for this event</Text>
+      {songs.map((song, index) => (
+        <Text key={song.id} style={styles.eventSongItem}>{index + 1}. {song.title}{song.key ? ` · ${song.key}` : ''}</Text>
+      ))}
+    </View>
+  );
+}
+
+function CalendarScreen({ events, songs, canManage, onRefresh, onEventCreated, onRespond }: { events: Rehearsal[]; songs: SongItem[]; canManage: boolean; onRefresh: () => Promise<void>; onEventCreated: (event: RehearsalRecord) => void; onRespond: (eventId: string, status: 'YES' | 'MAYBE' | 'NO') => Promise<void> }) {
   const [viewDate, setViewDate] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
   const [busyEventId, setBusyEventId] = useState<string | null>(null);
@@ -556,6 +598,7 @@ function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespon
   const [eventEndTime, setEventEndTime] = useState('');
   const [eventType, setEventType] = useState<EventType>('REHEARSAL');
   const [customEventType, setCustomEventType] = useState('');
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastCheckedAt, setLastCheckedAt] = useState(() => new Date());
@@ -636,6 +679,7 @@ function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespon
       setResponseNotice({ type: 'error', message: 'Choose a valid schedule, with the end time after the start time.' });
       return;
     }
+    const eventSongIds = selectedSongIds.filter((id) => songs.some((song) => song.id === id));
     setCreatingEvent(true);
     setResponseNotice(null);
     try {
@@ -646,6 +690,7 @@ function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespon
         endsAt: endDate.toISOString(),
         eventType,
         customEventType: eventType === 'CUSTOM' ? customEventType.trim() : undefined,
+        songIds: eventSongIds.length > 0 ? eventSongIds : undefined,
       });
       onEventCreated(created);
       setShowCreateForm(false);
@@ -656,7 +701,8 @@ function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespon
       setEventEndTime('');
       setEventType('REHEARSAL');
       setCustomEventType('');
-      setResponseNotice({ type: 'success', message: 'Event added to the choir calendar.' });
+      setSelectedSongIds([]);
+      setResponseNotice({ type: 'success', message: eventSongIds.length > 0 ? `Event added with ${eventSongIds.length} song${eventSongIds.length === 1 ? '' : 's'}.` : 'Event added to the choir calendar.' });
     } catch (error) {
       setResponseNotice({ type: 'error', message: error instanceof Error ? error.message : 'We could not add this event.' });
     } finally {
@@ -695,6 +741,8 @@ function CalendarScreen({ events, canManage, onRefresh, onEventCreated, onRespon
         </TouchableOpacity>)}
       </View>
       {eventType === 'CUSTOM' && <Field label="CUSTOM EVENT TYPE" value={customEventType} onChangeText={setCustomEventType} placeholder="Choir retreat" />}
+      <Text style={[styles.fieldLabel, { marginTop: 5, marginBottom: 8 }]}>SONGS FOR THIS EVENT</Text>
+      <EventSongPicker songs={songs} selectedSongIds={selectedSongIds} onChange={setSelectedSongIds} />
       <TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={creatingEvent}>
         <Text style={styles.adminButtonText}>{creatingEvent ? 'Adding event...' : 'Save event'}</Text>
       </TouchableOpacity>
@@ -745,6 +793,7 @@ function CalendarEventCard({ event, canManage, response, busy, onRespond }: { ev
       </View>
       <View style={[styles.reportPill, responseStyle]}><Text style={styles.reportPillText}>{response === 'PENDING' && event.invitationOnly ? 'Awaiting response' : responseLabels[response]}</Text></View>
     </View>
+    <EventSongSetlist songs={event.songs} />
     {canManage ? <>
       <View style={styles.calendarAdminSummary}><Ionicons name="people-outline" size={15} color={COLORS.muted} /><Text style={styles.calendarAdminSummaryText}>{event.invitees ? `${event.invitees.filter((member) => member.status === 'YES').length} accepted · ${event.invitees.filter((member) => member.status === 'NO').length} declined · ${event.invitees.filter((member) => member.status === 'PENDING' || member.status === 'MAYBE').length} awaiting` : `${event.confirmedCount ?? 0} accepted`}</Text></View>
       {event.invitees && event.invitees.length > 0 && <View style={styles.calendarInviteeList}>{event.invitees.map((member) => <View key={member.userId} style={styles.calendarInviteeRow}><Text style={styles.calendarInviteeName}>{member.name}</Text><Text style={[styles.calendarInviteeStatus, member.status === 'YES' ? styles.reportAvailableText : member.status === 'NO' ? styles.reportUnavailableText : styles.reportPendingText]}>{responseLabels[member.status]}</Text></View>)}</View>}
@@ -774,6 +823,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
   const [recurrenceCount, setRecurrenceCount] = useState('1');
   const [inviteMode, setInviteMode] = useState<'ALL' | 'SELECTED'>('ALL');
   const [selectedInviteeIds, setSelectedInviteeIds] = useState<string[]>([]);
+  const [selectedSongIds, setSelectedSongIds] = useState<string[]>([]);
   const [newsTitle, setNewsTitle] = useState('');
   const [newsMessage, setNewsMessage] = useState('');
   const [songTitle, setSongTitle] = useState('');
@@ -840,6 +890,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       setNotice({ type: 'error', text: 'Choose at least one choir member, or select Whole choir.' });
       return;
     }
+    const eventSongIds = selectedSongIds.filter((id) => songs.some((song) => song.id === id));
     setBusy(true);
     setNotice(null);
     try {
@@ -853,6 +904,7 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
         recurrenceFrequency,
         recurrenceCount: recurrenceFrequency === 'NONE' ? 1 : parsedRecurrenceCount,
         inviteeIds: inviteMode === 'SELECTED' ? selectedInviteeIds : undefined,
+        songIds: eventSongIds.length > 0 ? eventSongIds : undefined,
       });
       const nextRehearsal: Rehearsal = { ...created, color: rehearsalColors[0] };
       onRehearsalAdded(nextRehearsal);
@@ -867,7 +919,10 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
       setRecurrenceCount('1');
       setInviteMode('ALL');
       setSelectedInviteeIds([]);
-      setNotice({ type: 'success', text: inviteMode === 'SELECTED' ? `Invitation sent to ${selectedInviteeIds.length} choir member${selectedInviteeIds.length === 1 ? '' : 's'}.` : 'Event added successfully and is now visible to the whole choir.' });
+      setSelectedSongIds([]);
+      setNotice({ type: 'success', text: eventSongIds.length > 0
+        ? `Event added with ${eventSongIds.length} song${eventSongIds.length === 1 ? '' : 's'}.`
+        : inviteMode === 'SELECTED' ? `Invitation sent to ${selectedInviteeIds.length} choir member${selectedInviteeIds.length === 1 ? '' : 's'}.` : 'Event added successfully and is now visible to the whole choir.' });
     } catch (error) {
       setNotice({ type: 'error', text: error instanceof Error ? error.message : 'We could not schedule the event. Please try again.' });
       Alert.alert('Could not add event', error instanceof Error ? error.message : 'Try again.');
@@ -1150,6 +1205,8 @@ function AdminPanel({ announcements, onAnnouncementPublished, onAnnouncementDele
             })}
           </View>
         )}
+        <Text style={[styles.fieldLabel, { marginTop: 5, marginBottom: 8 }]}>SONGS FOR THIS EVENT</Text>
+        <EventSongPicker songs={songs} selectedSongIds={selectedSongIds} onChange={setSelectedSongIds} />
         <TouchableOpacity style={styles.adminButton} onPress={addEvent} disabled={busy}>
           <Text style={styles.adminButtonText}>{busy ? 'Saving...' : inviteMode === 'SELECTED' ? 'Schedule and invite' : 'Add event for choir'}</Text>
         </TouchableOpacity>
@@ -1275,22 +1332,11 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
     <KeyboardAvoidingView style={styles.authShell} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={[styles.authContent, isDesktop && styles.authDesktopContent]} keyboardShouldPersistTaps="handled">
         {isDesktop && <View style={styles.authFeaturePanel}>
-          <View style={styles.authArtworkGlow} />
-          <View style={styles.authArtworkCircleLarge} />
-          <View style={styles.authArtworkCircleSmall} />
-          <View style={styles.authArtworkCard}>
-            <View style={styles.authArtworkLogoFrame}>
-              <Image source={require('./elayone.jpg')} style={styles.authArtworkLogo} resizeMode="cover" accessibilityLabel="Elayone Music logo" />
-            </View>
-            <View style={styles.authSoundWaves}>
-              {[22, 42, 66, 88, 58, 36, 72, 48, 26].map((height, index) => <View key={index} style={[styles.authSoundWave, { height }]} />)}
-            </View>
-            <Text style={styles.authArtworkCaption}>SING TOGETHER</Text>
-          </View>
-          <View style={styles.authArtworkNote}><Ionicons name="musical-notes" size={18} color="#675d4a" /><Text style={styles.authArtworkNoteText}>One shared song</Text></View>
+          <Image source={require('./elayone.jpg')} style={styles.authFeatureImage} accessibilityLabel="Elayone Music artwork" />
+          <View style={styles.authFeatureOverlay} />
           <View style={styles.authFeatureContent}>
             <Text style={styles.authFeatureKicker}>WELCOME TO ELAYONE</Text>
-            <Text style={styles.authFeatureTitle}>Make room for{`\n`}every voice.</Text>
+            <Text style={styles.authFeatureTitle}>Make room for every voice.</Text>
             <Text style={styles.authFeatureBody}>A friendly place to prepare, serve, and grow together in music.</Text>
           </View>
         </View>}
@@ -1312,6 +1358,95 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (session: Session) =
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView>;
+}
+
+function MemberPanel({ memberName, email, memberUserId }: { memberName: string; email: string; memberUserId: string }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [busySet, setBusySet] = useState(false);
+  const [busySetConfirm, setBusySetConfirm] = useState(false);
+
+  async function saveNewPassword() {
+    if (newPassword.length < 8) {
+      setMessage({ type: 'error', text: 'The new password must be at least 8 characters.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: 'The new password and confirmation do not match.' });
+      return;
+    }
+    setBusySetConfirm(true);
+    setMessage(null);
+    try {
+      const result = await setMemberPassword(memberUserId, currentPassword, newPassword);
+      setNewPassword('');
+      setConfirmPassword('');
+      setMessage({ type: 'success', text: result.message });
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Could not update your password. Please try again.' });
+    } finally {
+      setBusySetConfirm(false);
+    }
+  }
+
+  async function changePassword() {
+    if (newPassword.length < 8) {
+      setMessage({ type: 'error', text: 'The new password must be at least 8 characters.' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: 'The new password and confirmation do not match.' });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await changeMyPassword(currentPassword, newPassword);
+      setNewPassword('');
+      setConfirmPassword('');
+      setMessage({ type: 'success', text: result.message });
+    } catch (error) {
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Could not change your password. Please try again.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.memberPanel}>
+      <View style={styles.memberHeader}>
+        <View style={styles.memberAvatar}><Text style={styles.memberInitial}>{memberName.slice(0, 1).toUpperCase()}</Text></View>
+        <View style={styles.memberInfo}>
+          <Text style={styles.memberName}>{memberName}</Text>
+          <Text style={styles.memberEmail}>{email}</Text>
+        </View>
+      </View>
+
+      {message ? (
+        <View style={[styles.noticeBanner, message.type === 'success' ? styles.noticeSuccess : styles.noticeError]}>
+          <Text style={[styles.noticeText, message.type === 'success' ? styles.noticeTextSuccess : styles.noticeTextError]}>{message.text}</Text>
+        </View>
+      ) : null}
+
+      <AdminForm title="Set / change your password" icon="key-outline">
+        <Text style={styles.adminHelp}>You received a temporary password from your choir administrator. Choose a new password you will remember, or update your password at any time.</Text>
+        <Field label="CURRENT PASSWORD" value={currentPassword} onChangeText={setCurrentPassword} placeholder="Current password" secureTextEntry />
+        <Field label="NEW PASSWORD" value={newPassword} onChangeText={setNewPassword} placeholder="At least 8 characters" secureTextEntry />
+        <Field label="CONFIRM NEW PASSWORD" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Repeat new password" secureTextEntry />
+        <View style={styles.memberPasswordActions}>
+          <TouchableOpacity style={styles.adminButton} onPress={saveNewPassword} disabled={busySetConfirm}>
+            <Text style={styles.adminButtonText}>{busySetConfirm ? 'Saving…' : 'Set new password'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.adminButton} onPress={changePassword} disabled={busy}>
+            <Text style={styles.adminButtonText}>{busy ? 'Changing…' : 'Update my password'}</Text>
+          </TouchableOpacity>
+        </View>
+      </AdminForm>
+    </View>
+  );
 }
 
 function Field({ label, value, onChangeText, placeholder, ...props }: { label: string; value: string; onChangeText: (value: string) => void; placeholder: string } & Omit<React.ComponentProps<typeof TextInput>, 'value' | 'onChangeText' | 'placeholder'>) {
@@ -1449,7 +1584,8 @@ function BaseTabView({ tab, rehearsals, selectedRehearsal, setSelectedRehearsal,
                   <View style={styles.listMain}>
                     <Text style={styles.listTitle}>{item.title}</Text>
                     <Text style={styles.listMeta}>{schedule.start} - {endTime} · {item.location}</Text>
-                    <Text style={styles.listAttendance}>{yesCount} attending</Text>
+                    <Text style={styles.listAttendance}>{yesCount} attending{item.songs && item.songs.length > 0 ? ` · ${item.songs.length} song${item.songs.length === 1 ? '' : 's'}` : ''}</Text>
+                    {item.songs && item.songs.length > 0 ? <Text style={styles.eventSongSummary}>{item.songs.map((song) => song.title).join(' · ')}</Text> : null}
                   </View>
                   <Ionicons name={selectedRehearsal === item.id ? 'checkmark-circle' : 'chevron-forward'} size={20} color={selectedRehearsal === item.id ? COLORS.olive : COLORS.muted} />
                 </TouchableOpacity>
@@ -1643,6 +1779,10 @@ const styles = StyleSheet.create({
   reportRetry: { color: COLORS.ink, fontSize: 11, fontWeight: '800', marginTop: 9 },
   reportEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, padding: 22, marginBottom: 12 },
   reportEmptyText: { color: COLORS.muted, fontSize: 11, lineHeight: 17, textAlign: 'center', marginTop: 9 },
+  eventSongSummary: { color: COLORS.muted, fontSize: 9, lineHeight: 14, marginTop: 6 },
+  eventSongList: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: COLORS.line },
+  eventSongListLabel: { color: COLORS.olive, fontSize: 8, fontWeight: '800', letterSpacing: 0.4, marginBottom: 4 },
+  eventSongItem: { color: COLORS.ink, fontSize: 10, lineHeight: 16 },
   inviteePicker: { backgroundColor: COLORS.paper, borderWidth: 1, borderColor: COLORS.line, borderRadius: 4, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 13 },
   inviteePickerCaption: { color: COLORS.muted, fontSize: 9, lineHeight: 14, marginBottom: 6 },
   inviteeRow: { flexDirection: 'row', alignItems: 'center', gap: 9, borderTopWidth: 1, borderTopColor: COLORS.line, paddingVertical: 9 },

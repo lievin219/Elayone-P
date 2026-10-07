@@ -223,6 +223,14 @@ export async function getAttendanceReport(choirId: string): Promise<AttendanceRe
 
 export type EventType = 'SERVICE' | 'REHEARSAL' | 'WORSHIP_NIGHT' | 'SPECIAL_EVENT' | 'CUSTOM';
 
+export type EventSongRecord = {
+  id: string;
+  title: string;
+  key: string | null;
+  status: string;
+  sortOrder?: number;
+};
+
 export type RehearsalRecord = {
   id: string;
   title: string;
@@ -239,6 +247,7 @@ export type RehearsalRecord = {
   invited?: boolean;
   myStatus?: AttendanceResponseStatus;
   confirmedCount?: number;
+  songs?: EventSongRecord[];
   invitees?: Array<{ userId: string; name: string; status: AttendanceResponseStatus }>;
   attendances?: Array<{ id: string; status: 'YES' | 'MAYBE' | 'NO' | 'PENDING'; userId: string }>;
 };
@@ -262,11 +271,19 @@ export async function resetUserPassword(userId: string, password: string): Promi
   return request<{ message: string }>(`/api/users/${userId}/password`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ password }) });
 }
 
+export async function setMemberPassword(userId: string, currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return request<{ message: string }>(`/api/users/${userId}/password/self`, { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ currentPassword, newPassword }) });
+}
+
+export async function changeMyPassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return request<{ message: string }>('/api/me/password', { method: 'PATCH', headers: await authHeaders(), body: JSON.stringify({ currentPassword, newPassword }) });
+}
+
 export async function createMemberAccount(data: { name: string; email: string; password: string }): Promise<DirectoryUser> {
   return request<DirectoryUser>('/api/users', { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }
 
-export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string; eventType?: EventType; customEventType?: string; recurrenceFrequency?: 'NONE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; recurrenceCount?: number; inviteeIds?: string[] }) {
+export async function createRehearsal(choirId: string, data: { title: string; startsAt: string; endsAt: string; location: string; eventType?: EventType; customEventType?: string; recurrenceFrequency?: 'NONE' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY'; recurrenceCount?: number; inviteeIds?: string[]; songIds?: string[] }) {
   return request<RehearsalRecord>(`/api/choirs/${choirId}/rehearsals`, { method: 'POST', headers: await authHeaders(), body: JSON.stringify(data) });
 }
 

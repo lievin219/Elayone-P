@@ -88,11 +88,31 @@ router.patch('/:userId/role', requireAdmin, async (request: AuthRequest, respons
 
 router.patch('/:userId/password', requireAdmin, async (request: AuthRequest, response) => {
   const password = typeof request.body?.password === 'string' ? request.body.password : '';
-  if (password.length < 8) return response.status(400).json({ message: 'The new password must be at least 8 characters.' });
+  if (password.length < 12) return response.status(400).json({ message: 'The new password must be at least 12 characters long and include a number and a symbol.' });
   const targetUser = await prisma.user.findUnique({ where: { id: String(request.params.userId) }, select: { id: true, name: true } });
   if (!targetUser) return response.status(404).json({ message: 'User not found.' });
   await prisma.user.update({ where: { id: targetUser.id }, data: { passwordHash: await bcrypt.hash(password, 12) } });
   return response.json({ message: `Password reset for ${targetUser.name}.` });
+});
+
+router.patch('/:userId/password/self', async (request: AuthRequest, response) => {
+  const { currentPassword, newPassword } = request.body ?? {};
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    return response.status(400).json({ message: 'Current password and new password are required.' });
+  }
+  if (newPassword.length < 8) return response.status(400).json({ message: 'The new password must be at least 8 characters.' });
+  const targetUser = await prisma.user.findUnique({
+    where: { id: String(request.params.userId) },
+    select: { id: true, name: true, passwordHash: true },
+  });
+  if (!targetUser) return response.status(404).json({ message: 'User not found.' });
+  const valid = targetUser.passwordHash ? await bcrypt.compare(currentPassword, targetUser.passwordHash) : false;
+  if (!valid) return response.status(401).json({ message: 'The current password is incorrect.' });
+  await prisma.user.update({
+    where: { id: targetUser.id },
+    data: { passwordHash: await bcrypt.hash(newPassword, 12) },
+  });
+  return response.json({ message: `Your password has been updated successfully.` });
 });
 
 export default router;
