@@ -106,3 +106,5 @@
 2026-10-07 14:09:50.813 CAT [6957] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.175 s, sync=0.003 s, total=0.228 s; sync files=2, longest=0.002 s, average=0.002 s; distance=2 kB, estimate=2734 kB; lsn=0/58C7CD0, redo lsn=0/58C7C98
 2026-10-07 14:19:50.853 CAT [6957] LOG:  checkpoint starting: time
 2026-10-07 14:19:52.126 CAT [6957] LOG:  checkpoint complete: wrote 13 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.265 s, sync=0.004 s, total=1.274 s; sync files=13, longest=0.003 s, average=0.001 s; distance=9 kB, estimate=2462 kB; lsn=0/58CA4B0, redo lsn=0/58CA478
+2026-10-07 15:20:36.127 CAT [6957] LOG:  checkpoint starting: time
+2026-10-07 15:20:36.345 CAT [6957] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.183 s, sync=0.003 s, total=0.246 s; sync files=2, longest=0.002 s, average=0.002 s; distance=2 kB, estimate=2216 kB; lsn=0/58CAE10, redo lsn=0/58CADD8

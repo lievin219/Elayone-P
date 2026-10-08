@@ -7,8 +7,3 @@ node_modules
 .env.local.*
 server/.env
 server/.env.*
-
-# Keep example files tracked so teammates can copy them
-.env.example
-.env.local.example
-!server/.env.example
